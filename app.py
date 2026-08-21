@@ -116,7 +116,28 @@ data_option = st.sidebar.radio(
 
 df_master = None
 
-if data_option == "Option 2: Pull Live Stream from Xero API Gateway":
+# --- STRICT OPTION FILTERING ENGINE CORE ---
+if data_option == "Option 1: Use Code-Embedded Transactions (Synthetic Portfolio Rows)":
+    st.info("📊 Portfolio Viewing Mode: Displaying Code-Embedded Transactions.")
+    embedded_20_transactions = { 
+        'Transaction ID': [f"TXN-{i}" for i in range(1001, 1011)], 
+        'SMS': [ 
+            "Dear Customer, £ 2240.78 was credited to your account from Petrie McLoud Watson.", 
+            "Dear Customer, £ 3897.00 was credited to your account from Boom FM.", 
+            "Trx. of £ 541.25 on your credit card at Boom FM.", 
+            "Trx. of £ 324.75 on your credit card at Bank West.", 
+            "Dear Customer, ATM Cash Withdrawal for £ 104.40 was debited by City Agency.", 
+            "Dear Customer, ATM Cash Withdrawal for £ 541.25 was debited by Hamilton Smith Ltd.", 
+            "Trx. of £ 541.25 on your account at Young Bros Transport.", 
+            "Trx. of £ 541.25 on your account at Port & Philip Freight.", 
+            "Trx. of £ 541.25 on your account at Rex Media Group.", 
+            "Dear Customer, £ 817.01 was debited from your account by Srinivas T A."
+        ]
+    } 
+    df_master = pd.DataFrame(embedded_20_transactions)
+
+else:
+    # Option 2: Strictly pull from Xero only!
     api_headers = {
         "Authorization": f"Bearer {st.session_state.access_token}",
         "Xero-tenant-id": st.session_state.xero_tenant_id,
@@ -145,32 +166,11 @@ if data_option == "Option 2: Pull Live Stream from Xero API Gateway":
                 })
             df_master = pd.DataFrame(data_records)
         else:
-            st.warning("⚠️ Connected Xero sandbox has no active historical bank rows. Reverting to Synthetic Portfolio View mode.")
-
-# --- 5. SYNTHETIC IMMUTABLE BACKUP BLOCK ---
-if df_master is None or df_master.empty:
-    if data_option == "Option 2: Pull Live Stream from Xero API Gateway":
-        st.info("💡 Note: Live API ledger returns an empty data vector state. Ingesting matched row collections for portfolio dashboard visual rendering views.")
+            # Real empty status notification layout
+            st.warning("⚠️ Connected Xero sandbox has no active historical bank rows. Go to Xero and reconcile items to push live datasets here.")
     else:
-        st.info("📊 Viewing Mode: Displaying Code-Embedded Transactions.")
-        
-    embedded_20_transactions = { 
-        'Transaction ID': [f"TXN-{i}" for i in range(1001, 1011)], 
-        'SMS': [ 
-            "Dear Customer, £ 2240.78 was credited to your account from Petrie McLoud Watson.", 
-            "Dear Customer, £ 3897.00 was credited to your account from Boom FM.", 
-            "Trx. of £ 541.25 on your credit card at Boom FM.", 
-            "Trx. of £ 324.75 on your credit card at Bank West.", 
-            "Dear Customer, ATM Cash Withdrawal for £ 104.40 was debited by City Agency.", 
-            "Dear Customer, ATM Cash Withdrawal for £ 541.25 was debited by Hamilton Smith Ltd.", 
-            "Trx. of £ 541.25 on your account at Young Bros Transport.", 
-            "Trx. of £ 541.25 on your account at Port & Philip Freight.", 
-            "Trx. of £ 541.25 on your account at Rex Media Group.", 
-            "Dear Customer, £ 817.01 was debited from your account by Srinivas T A."
-        ]
-    } 
-    df_master = pd.DataFrame(embedded_20_transactions)
-# --- 6. MACHINE LEARNING PROCESSING CALCULATOR ---
+        st.error(f"Xero API Error Stream pipeline: {invoice_res.text}")
+# --- 5. MACHINE LEARNING PROCESSING CALCULATOR ---
 def run_unsupervised_accounting_pipeline(df):
     df_out = df.copy()
     df_out['cleaned_sms'] = df_out['SMS'].fillna("").astype(str).str.strip().str.lower()
@@ -202,11 +202,10 @@ def run_unsupervised_accounting_pipeline(df):
         
     return df_out
 
-# --- 7. DATAFRAME PARSING & INTERFACE LAYOUT RENDER ---
-if df_master is not None:
+# --- 6. DATAFRAME PARSING & INTERFACE LAYOUT RENDER ---
+if df_master is not None and not df_master.empty:
     df_final = run_unsupervised_accounting_pipeline(df_master) 
     
-    # 🛡️ THE DEFINITIVE NUMERICAL PARSER FIX: Dynamically extracts values regardless of position or layout constraints
     def extract_currency_float(text): 
         cleaned = re.sub(r'[\s\xa0,]+', '', str(text))
         match = re.search(r'(?:AED|gbp|usd|\$|£)([\d.]+)', cleaned, re.IGNORECASE)
@@ -261,8 +260,10 @@ if df_master is not None:
             ) 
         } 
     )
+elif df_master is not None and df_master.empty:
+    st.warning("📊 No data entries available inside this specific view selection layer.")
 
-# --- 8. IMMUTABLE PORTFOLIO ATTR_FOOTER INTERFACES ---
+# --- 7. IMMUTABLE PORTFOLIO ATTR_FOOTER INTERFACES ---
 st.markdown("---")
 st.markdown(
     "© 2026 T A Srinivas. All Rights Reserved. Prototype for portfolio display. "
