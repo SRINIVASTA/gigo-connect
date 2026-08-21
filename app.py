@@ -69,7 +69,7 @@ if not st.session_state.access_token:
             conn_res = requests.get("https://xero.com", headers=t_headers)
             
             if conn_res.status_code == 200 and conn_res.json():
-                # 🛡️ FIX: Grab the index [0] to extract data out of the connection list structure safely
+                # 🛡️ THE CRITICAL ARRAYS FIX: Force code to target index [0] to extract the dict profile cleanly
                 connections_list = conn_res.json()
                 st.session_state.xero_tenant_id = connections_list[0]["tenantId"]
                 st.session_state.tenant_name = connections_list[0]["tenantName"]
