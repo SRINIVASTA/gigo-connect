@@ -202,7 +202,8 @@ if df_master is not None:
     df_final = run_unsupervised_accounting_pipeline(df_master) 
     
     def extract_currency_float(text): 
-        match = re.search(r'(?:AED|aed)\s*([\d,]+\.?\d*)', str(text)) 
+# Updated regex pattern to intercept AED, USD, GBP, $, or £ symbols automatically
+        match = re.search(r'(?:AED|aed|GBP|gbp|USD|usd|\$|£)\s*([\d,]+\.?\d*)', str(text)) 
         return float(match.group(1).replace(',', '')) if match else 0.0 
         
     df_confirmed = df_final[df_final['pipeline_status'] == 'CLUSTER_CONFIRMED'].copy() 
