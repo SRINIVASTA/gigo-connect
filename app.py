@@ -19,7 +19,8 @@ except KeyError:
     st.error("⚠️ Missing API configuration variables! Please configure XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI inside your Streamlit Cloud Secrets dashboard panel.")
     st.stop()
 
-XERO_SCOPES = "openid profile email accounting.transactions.read accounting.contacts.read"
+# 🛡️ FIXED GRANULAR SCOPES: Changed from broad transactions.read to exact new granular syntax
+XERO_SCOPES = "openid profile email accounting.banktransactions.read accounting.contacts.read"
 
 # --- 2. SYSTEM INITIALIZATION & LOGGING CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -60,17 +61,17 @@ if not st.session_state.access_token:
         headers = {"Authorization": f"Basic {b64_credentials}", "Content-Type": "application/x-www-form-urlencoded"}
         data = {"grant_type": "authorization_code", "code": auth_code, "redirect_uri": XERO_REDIRECT_URI}
         
-        token_response = requests.post("https://xero.com", headers=headers, data=data)
+        token_response = requests.post("https://identity.xero.com/connect/token", headers=headers, data=data)
         if token_response.status_code == 200:
             st.session_state.access_token = token_response.json()["access_token"]
             
             # Map Active Tenant ID Organization profile
             t_headers = {"Authorization": f"Bearer {st.session_state.access_token}", "Content-Type": "application/json"}
-            conn_res = requests.get("https://api.xero.com/connections", headers=t_headers)
+            conn_res = requests.get("https://xero.com", headers=t_headers)
             
             if conn_res.status_code == 200 and conn_res.json():
-                # 🛡️ THE DEFINITIVE ARRAYS INDEX FIX: Explicitly target index [0] to extract values safely
                 connections_list = conn_res.json()
+                # Safely extract first dictionary list connection parameters mapping syntax
                 st.session_state.xero_tenant_id = connections_list[0]["tenantId"]
                 st.session_state.tenant_name = connections_list[0]["tenantName"]
                 st.query_params.clear()
