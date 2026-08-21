@@ -74,9 +74,6 @@ if not st.session_state.access_token:
                     if isinstance(connections_list, list) and len(connections_list) > 0:
                         st.session_state.xero_tenant_id = connections_list[0]["tenantId"]
                         st.session_state.tenant_name = connections_list[0]["tenantName"]
-                    elif isinstance(connections_list, dict):
-                        st.session_state.xero_tenant_id = connections_list.get("tenantId")
-                        st.session_state.tenant_name = connections_list.get("tenantName")
                     
                     if not st.session_state.tenant_name:
                         st.session_state.tenant_name = "Demo Company (Global)"
@@ -107,42 +104,53 @@ if st.button("🔌 Disconnect Ledger / Sign Out"):
     st.session_state.tenant_name = None
     st.rerun()
 
-api_headers = {
-    "Authorization": f"Bearer {st.session_state.access_token}",
-    "Xero-tenant-id": st.session_state.xero_tenant_id,
-    "Accept": "application/json"
-}
-
-with st.spinner("🧠 Syncing live ledger data into Anti-GIGO engine pipelines..."):
-    invoice_res = requests.get("https://xero.com", headers=api_headers)
+# --- 4. RADIO BUTTON DATA SOURCE SELECTION ---
+st.sidebar.header("📊 Data Source Selection") 
+data_option = st.sidebar.radio( 
+    "Choose how you want to load data:", 
+    ("Option 1: Use Code-Embedded Transactions (Synthetic Portfolio Rows)", "Option 2: Pull Live Stream from Xero API Gateway") 
+) 
 
 df_master = None
-if invoice_res.status_code == 200:
-    try:
-        raw_txs = invoice_res.json().get("BankTransactions", [])
-    except Exception:
-        raw_txs = []
-    
-    if raw_txs:
-        data_records = []
-        for tx in raw_txs:
-            amount = float(tx.get('Total', 0.0))
-            contact_name = tx.get('Contact', {}).get('Name', 'Unknown Vendor')
-            reference = tx.get('Reference', 'General Outlay')
-            tx_type = tx.get('Type', 'SPEND')
-            currency_symbol = "£" if "Global" in str(st.session_state.tenant_name) else "AED"
-            
-            reconstructed_text_log = f"Trx of {currency_symbol} {amount:,.2f} on your account. Type: {tx_type} at {contact_name}. Ref: {reference}."
-            data_records.append({
-                "Transaction ID": tx.get("BankTransactionID"),
-                "SMS": reconstructed_text_log,
-                "Raw Amount": amount
-            })
-        df_master = pd.DataFrame(data_records)
 
-# 🛡️ THE CRITICAL GRAPH PIECE FIX: Injected 'Raw Amount' values directly into the synthetic matrix map columns list
+if data_option == "Option 2: Pull Live Stream from Xero API Gateway":
+    api_headers = {
+        "Authorization": f"Bearer {st.session_state.access_token}",
+        "Xero-tenant-id": st.session_state.xero_tenant_id,
+        "Accept": "application/json"
+    }
+    with st.spinner("🧠 Syncing live ledger data into Anti-GIGO engine pipelines..."):
+        invoice_res = requests.get("https://xero.com", headers=api_headers)
+
+    if invoice_res.status_code == 200:
+        try:
+            raw_txs = invoice_res.json().get("BankTransactions", [])
+        except Exception:
+            raw_txs = []
+        
+        if raw_txs:
+            data_records = []
+            for tx in raw_txs:
+                amount = float(tx.get('Total', 0.0))
+                contact_name = tx.get('Contact', {}).get('Name', 'Unknown Vendor')
+                reference = tx.get('Reference', 'General Outlay')
+                tx_type = tx.get('Type', 'SPEND')
+                reconstructed_text_log = f"Trx of £ {amount:,.2f} on your account. Type: {tx_type} at {contact_name}. Ref: {reference}."
+                data_records.append({
+                    "Transaction ID": tx.get("BankTransactionID"),
+                    "SMS": reconstructed_text_log
+                })
+            df_master = pd.DataFrame(data_records)
+        else:
+            st.warning("⚠️ Connected Xero sandbox has no active historical bank rows. Reverting to Synthetic Portfolio View mode.")
+
+# --- 5. SYNTHETIC IMMUTABLE BACKUP BLOCK ---
 if df_master is None or df_master.empty:
-    st.info("💡 Note: Live API ledger returns an empty data vector state. Ingesting matched row collections for portfolio dashboard visual rendering views.")
+    if data_option == "Option 2: Pull Live Stream from Xero API Gateway":
+        st.info("💡 Note: Live API ledger returns an empty data vector state. Ingesting matched row collections for portfolio dashboard visual rendering views.")
+    else:
+        st.info("📊 Viewing Mode: Displaying Code-Embedded Transactions.")
+        
     embedded_20_transactions = { 
         'Transaction ID': [f"TXN-{i}" for i in range(1001, 1011)], 
         'SMS': [ 
@@ -156,8 +164,7 @@ if df_master is None or df_master.empty:
             "Trx. of £ 541.25 on your account at Port & Philip Freight.", 
             "Trx. of £ 541.25 on your account at Rex Media Group.", 
             "Dear Customer, £ 817.01 was debited from your account by Srinivas T A."
-        ],
-        'Raw Amount': [2240.78, 3897.00, 541.25, 324.75, 104.40, 541.25, 541.25, 541.25, 541.25, 817.01]
+        ]
     } 
     df_master = pd.DataFrame(embedded_20_transactions)
 # --- 6. MACHINE LEARNING PROCESSING CALCULATOR ---
@@ -197,8 +204,10 @@ if df_master is not None:
     df_final = run_unsupervised_accounting_pipeline(df_master) 
     
     def extract_currency_float(text): 
-        match = re.search(r'(?:AED|aed|gbp|usd|\$|£)\s*([\d,]+\.?\d*)', str(text), re.IGNORECASE) 
-        return float(match.group(1).replace(',', '')) if match else 0.0 
+        # 🛡️ THE PERFECT SCRAPER FIX: Removes standard commas and all forms of regex whitespace groupings (\s)
+        cleaned = re.sub(r'[\s\xa0,]+', '', str(text))
+        match = re.search(r'(?:AED|gbp|usd|\$|£)([\d.]+)', cleaned, re.IGNORECASE)
+        return float(match.group(1)) if match else 0.0
         
     df_confirmed = df_final[df_final['pipeline_status'] == 'CLUSTER_CONFIRMED'].copy() 
     df_confirmed['parsed_amount'] = df_confirmed['SMS'].apply(extract_currency_float) 
