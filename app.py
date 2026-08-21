@@ -8,6 +8,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
+from urllib.parse import urlencode
 
 # --- 1. CONFIGURATION CORE CREDENTIALS (STREAMLIT SECRETS) ---
 try:
@@ -18,7 +19,6 @@ except KeyError:
     st.error("⚠️ Missing API configuration variables! Please configure XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI inside your Streamlit Cloud Secrets dashboard panel.")
     st.stop()
 
-# 🛡️ UPDATED SCOPES: Added accounting.transactions.read to pull active bank transactions
 XERO_SCOPES = "openid profile email accounting.transactions.read accounting.contacts.read"
 
 # --- 2. SYSTEM INITIALIZATION & LOGGING CONFIGURATION ---
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(layout="wide", page_title="Gigo Connect — ML Ledger Platform")
 
+# Maintain state tracking properties through application reruns
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
 if "xero_tenant_id" not in st.session_state:
@@ -36,17 +37,23 @@ if "tenant_name" not in st.session_state:
 
 st.title("📊 Unsupervised Xero ML Bookkeeping & Analytics Engine") 
 st.caption("An anti-GIGO system designed to ingest, clean, and cluster unlabeled financial text notifications.") 
+
 # --- 3. XERO OAUTH 2.0 HANDSHAKE PIPELINE GATEWAY ---
 if not st.session_state.access_token:
     query_params = st.query_params
     
     if "code" not in query_params:
         st.info("💡 Your application is currently disconnected from Xero.")
-        auth_url = (
-            f"https://xero.com?"
-            f"response_type=code&client_id={XERO_CLIENT_ID}&redirect_uri={XERO_REDIRECT_URI}&"
-            f"scope={XERO_SCOPES.replace(' ', '%20')}&state=gigo_secure_state"
-        )
+        
+        # 🛡️ FIX: Safe programmatic URL string parameter building parameters block 
+        params = {
+            "response_type": "code",
+            "client_id": XERO_CLIENT_ID,
+            "redirect_uri": XERO_REDIRECT_URI,
+            "scope": XERO_SCOPES,
+            "state": "gigo_secure_state"
+        }
+        auth_url = f"https://xero.com?{urlencode(params)}"
         st.link_button("🔌 Connect Live Xero Demo Company Ledger", auth_url, type="primary")
         st.stop()
     else:
@@ -84,35 +91,29 @@ api_headers = {
     "Accept": "application/json"
 }
 
-with st.spinner("🧠 Syncing live bank ledger records into anti-GIGO pipelines..."):
-    # 🔄 UPDATED ENDPOINT: Changed from Invoices to BankTransactions to fetch real statement objects
-    bank_res = requests.get("https://xero.com", headers=api_headers)
+with st.spinner("🧠 Syncing live ledger data into Anti-GIGO engine pipelines..."):
+    invoice_res = requests.get("https://xero.com", headers=api_headers)
 
 df_master = None
-if bank_res.status_code == 200:
-    raw_transactions = bank_res.json().get("BankTransactions", [])
+if invoice_res.status_code == 200:
+    raw_invoices = invoice_res.json().get("BankTransactions", [])
     
-    if raw_transactions:
+    if raw_invoices:
         data_records = []
-        for tx in raw_transactions:
-            contact_name = tx.get('Contact', {}).get('Name', 'Unknown Vendor/Payee')
-            reference = tx.get('Reference', 'No Reference String provided')
-            amount = float(tx.get('Total', 0.0))
-            tx_type = tx.get('Type', 'SPEND') # RECEIVE or SPEND
-            
-            # Formats an accurate simulated text log string for K-Means to cluster
-            simulated_sms_format = f"Trx of AED {amount:,.2f} on your a/c. Type: {tx_type} at {contact_name}. Ref: {reference}."
-            
+        for inv in raw_invoices:
+            amount = float(inv.get('Total', 0.0))
+            contact_name = inv.get('Contact', {}).get('Name', 'Unknown Customer')
+            reconstructed_text_log = f"Trx of AED {amount} at {contact_name}. Status: {inv.get('Status')}."
             data_records.append({
-                "Transaction ID": tx.get("BankTransactionID"),
-                "SMS": simulated_sms_format,
+                "Transaction ID": inv.get("BankTransactionID"),
+                "SMS": reconstructed_text_log,
                 "Raw Amount": amount
             })
         df_master = pd.DataFrame(data_records)
     else:
-        st.warning("⚠️ The connected Xero sandbox ledger is currently empty. Please generate demo data in your Xero settings.")
+        st.warning("⚠️ Connected Xero sandbox has no historical records inside.")
 else:
-    st.error(f"Failed to fetch ledger rows: {bank_res.text}")
+    st.error(f"Failed to fetch ledger rows: {invoice_res.text}")
 
 # --- 5. MACHINE LEARNING PROCESSING CALCULATOR ---
 def run_unsupervised_accounting_pipeline(df):
@@ -129,14 +130,23 @@ def run_unsupervised_accounting_pipeline(df):
         
         def infer_category_label(row):
             text = row['cleaned_sms']
-            if any(word in text for word in ['receive', 'credit', 'received', 'deposited']):
+            if any(word in text for word in ['credit', 'received', 'deposited']):
                 return "Liquidity Inbound Credits"
             elif any(word in text for word in ['withdrawal', 'atm', 'cash debited', 'debited']):
                 return "Cash Counter / ATM Withdrawals"
-            elif any(word in text for word in ['spend', 'supermarket', 'cafe', 'order', 'online', 'trx']):
+            elif any(word in text for word in ['trx', 'at', 'supermarket', 'cafe', 'order', 'online']):
                 return "Merchant Outlays / POS Card Debits"
-            else:
+            elif any(word in text for word in ['created', 'chequebook', 'requested']):
                 return "System Admin / Operational Tasks"
+            
+            cluster_id = row['cluster_label_id']
+            fallback_map = {
+                0: "Merchant Outlays / POS Card Debits",
+                1: "Liquidity Inbound Credits",
+                2: "Cash Counter / ATM Withdrawals",
+                3: "System Admin / Operational Tasks"
+            }
+            return fallback_map.get(cluster_id, "Unclassified Operations")
 
         df_out['assigned_accounting_category'] = df_out.apply(infer_category_label, axis=1)
         df_out['pipeline_status'] = 'CLUSTER_CONFIRMED'
@@ -157,7 +167,7 @@ if df_master is not None:
     df_confirmed = df_final[df_final['pipeline_status'] == 'CLUSTER_CONFIRMED'].copy() 
     df_confirmed['parsed_amount'] = df_confirmed['SMS'].apply(extract_currency_float) 
     
-    pivot_summary = df_confirmed.groupby('assigned_accounting_category').agg(
+    pivot_summary = df_confirmed.groupby('assigned_accounting_category').agg( 
         transaction_count=('pipeline_status', 'count'), 
         total_volume_aed=('parsed_amount', 'sum'), 
         average_ticket_aed=('parsed_amount', 'mean') 
