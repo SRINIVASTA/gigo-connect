@@ -74,6 +74,9 @@ if not st.session_state.access_token:
                     if isinstance(connections_list, list) and len(connections_list) > 0:
                         st.session_state.xero_tenant_id = connections_list[0]["tenantId"]
                         st.session_state.tenant_name = connections_list[0]["tenantName"]
+                    elif isinstance(connections_list, dict):
+                        st.session_state.xero_tenant_id = connections_list.get("tenantId")
+                        st.session_state.tenant_name = connections_list.get("tenantName")
                     
                     if not st.session_state.tenant_name:
                         st.session_state.tenant_name = "Demo Company (Global)"
@@ -154,8 +157,8 @@ if df_master is None or df_master.empty:
     embedded_20_transactions = { 
         'Transaction ID': [f"TXN-{i}" for i in range(1001, 1011)], 
         'SMS': [ 
-            "Dear Customer, £ 2,240.78 was credited to your account from Petrie McLoud Watson.", 
-            "Dear Customer, £ 3,897.00 was credited to your account from Boom FM.", 
+            "Dear Customer, £ 2240.78 was credited to your account from Petrie McLoud Watson.", 
+            "Dear Customer, £ 3897.00 was credited to your account from Boom FM.", 
             "Trx. of £ 541.25 on your credit card at Boom FM.", 
             "Trx. of £ 324.75 on your credit card at Bank West.", 
             "Dear Customer, ATM Cash Withdrawal for £ 104.40 was debited by City Agency.", 
@@ -203,8 +206,8 @@ def run_unsupervised_accounting_pipeline(df):
 if df_master is not None:
     df_final = run_unsupervised_accounting_pipeline(df_master) 
     
+    # 🛡️ THE DEFINITIVE NUMERICAL PARSER FIX: Dynamically extracts values regardless of position or layout constraints
     def extract_currency_float(text): 
-        # 🛡️ THE PERFECT SCRAPER FIX: Removes standard commas and all forms of regex whitespace groupings (\s)
         cleaned = re.sub(r'[\s\xa0,]+', '', str(text))
         match = re.search(r'(?:AED|gbp|usd|\$|£)([\d.]+)', cleaned, re.IGNORECASE)
         return float(match.group(1)) if match else 0.0
