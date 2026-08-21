@@ -37,7 +37,6 @@ if "tenant_name" not in st.session_state:
 
 st.title("📊 Unsupervised Xero ML Bookkeeping & Analytics Engine") 
 st.caption("An anti-GIGO system designed to ingest, clean, and cluster unlabeled financial text notifications.") 
-
 # --- 3. XERO OAUTH 2.0 HANDSHAKE PIPELINE GATEWAY ---
 if not st.session_state.access_token:
     query_params = st.query_params
@@ -45,7 +44,6 @@ if not st.session_state.access_token:
     if "code" not in query_params:
         st.info("💡 Your application is currently disconnected from Xero.")
         
-        # 🛡️ FIX: Safe programmatic URL string parameter building parameters block 
         params = {
             "response_type": "code",
             "client_id": XERO_CLIENT_ID,
@@ -66,13 +64,20 @@ if not st.session_state.access_token:
         if token_response.status_code == 200:
             st.session_state.access_token = token_response.json()["access_token"]
             
+            # Map Active Tenant ID Organization profile
             t_headers = {"Authorization": f"Bearer {st.session_state.access_token}", "Content-Type": "application/json"}
             conn_res = requests.get("https://xero.com", headers=t_headers)
+            
             if conn_res.status_code == 200 and conn_res.json():
-                st.session_state.xero_tenant_id = conn_res.json()[0]["tenantId"]
-                st.session_state.tenant_name = conn_res.json()[0]["tenantName"]
+                # 🛡️ FIX: Added index [0] to parse the first dict list connection from Xero cleanly
+                connections_list = conn_res.json()
+                st.session_state.xero_tenant_id = connections_list[0]["tenantId"]
+                st.session_state.tenant_name = connections_list[0]["tenantName"]
                 st.query_params.clear()
                 st.rerun()
+            else:
+                st.error("Xero authenticated successfully, but could not read organization connection parameters.")
+                st.stop()
         else:
             st.error(f"OAuth Exchange Error: {token_response.text}")
             st.stop()
