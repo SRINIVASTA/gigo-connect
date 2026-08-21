@@ -18,6 +18,7 @@ except KeyError:
     st.error("⚠️ Missing API configuration variables! Please configure XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI inside your Streamlit Cloud Secrets dashboard panel.")
     st.stop()
 
+# 🛡️ UPDATED SCOPES: Added accounting.transactions.read to pull active bank transactions
 XERO_SCOPES = "openid profile email accounting.transactions.read accounting.contacts.read"
 
 # --- 2. SYSTEM INITIALIZATION & LOGGING CONFIGURATION ---
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(layout="wide", page_title="Gigo Connect — ML Ledger Platform")
 
-# Maintain state tracking properties through application reruns
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
 if "xero_tenant_id" not in st.session_state:
@@ -84,27 +84,35 @@ api_headers = {
     "Accept": "application/json"
 }
 
-with st.spinner("🧠 Syncing live ledger data into Anti-GIGO engine pipelines..."):
-    invoice_res = requests.get("https://xero.com", headers=api_headers)
+with st.spinner("🧠 Syncing live bank ledger records into anti-GIGO pipelines..."):
+    # 🔄 UPDATED ENDPOINT: Changed from Invoices to BankTransactions to fetch real statement objects
+    bank_res = requests.get("https://xero.com", headers=api_headers)
 
 df_master = None
-if invoice_res.status_code == 200:
-    raw_invoices = invoice_res.json().get("Invoices", [])
+if bank_res.status_code == 200:
+    raw_transactions = bank_res.json().get("BankTransactions", [])
     
-    if raw_invoices:
+    if raw_transactions:
         data_records = []
-        for inv in raw_invoices:
-            reconstructed_text_log = f"Trx of AED {inv.get('Total', '0.00')} at {inv.get('Contact', {}).get('Name', 'Unknown Customer')}. Status: {inv.get('Status')}."
+        for tx in raw_transactions:
+            contact_name = tx.get('Contact', {}).get('Name', 'Unknown Vendor/Payee')
+            reference = tx.get('Reference', 'No Reference String provided')
+            amount = float(tx.get('Total', 0.0))
+            tx_type = tx.get('Type', 'SPEND') # RECEIVE or SPEND
+            
+            # Formats an accurate simulated text log string for K-Means to cluster
+            simulated_sms_format = f"Trx of AED {amount:,.2f} on your a/c. Type: {tx_type} at {contact_name}. Ref: {reference}."
+            
             data_records.append({
-                "Transaction ID": inv.get("InvoiceNumber", inv.get("InvoiceID")),
-                "SMS": reconstructed_text_log,
-                "Raw Amount": float(inv.get("Total", 0.0))
+                "Transaction ID": tx.get("BankTransactionID"),
+                "SMS": simulated_sms_format,
+                "Raw Amount": amount
             })
         df_master = pd.DataFrame(data_records)
     else:
-        st.warning("⚠️ Connected Xero sandbox has no historical invoice objects inside.")
+        st.warning("⚠️ The connected Xero sandbox ledger is currently empty. Please generate demo data in your Xero settings.")
 else:
-    st.error(f"Failed to fetch ledger rows: {invoice_res.text}")
+    st.error(f"Failed to fetch ledger rows: {bank_res.text}")
 
 # --- 5. MACHINE LEARNING PROCESSING CALCULATOR ---
 def run_unsupervised_accounting_pipeline(df):
@@ -121,23 +129,14 @@ def run_unsupervised_accounting_pipeline(df):
         
         def infer_category_label(row):
             text = row['cleaned_sms']
-            if any(word in text for word in ['credit', 'received', 'deposited']):
+            if any(word in text for word in ['receive', 'credit', 'received', 'deposited']):
                 return "Liquidity Inbound Credits"
             elif any(word in text for word in ['withdrawal', 'atm', 'cash debited', 'debited']):
                 return "Cash Counter / ATM Withdrawals"
-            elif any(word in text for word in ['trx', 'at', 'supermarket', 'cafe', 'order', 'online']):
+            elif any(word in text for word in ['spend', 'supermarket', 'cafe', 'order', 'online', 'trx']):
                 return "Merchant Outlays / POS Card Debits"
-            elif any(word in text for word in ['created', 'chequebook', 'requested']):
+            else:
                 return "System Admin / Operational Tasks"
-            
-            cluster_id = row['cluster_label_id']
-            fallback_map = {
-                0: "Merchant Outlays / POS Card Debits",
-                1: "Liquidity Inbound Credits",
-                2: "Cash Counter / ATM Withdrawals",
-                3: "System Admin / Operational Tasks"
-            }
-            return fallback_map.get(cluster_id, "Unclassified Operations")
 
         df_out['assigned_accounting_category'] = df_out.apply(infer_category_label, axis=1)
         df_out['pipeline_status'] = 'CLUSTER_CONFIRMED'
@@ -158,7 +157,7 @@ if df_master is not None:
     df_confirmed = df_final[df_final['pipeline_status'] == 'CLUSTER_CONFIRMED'].copy() 
     df_confirmed['parsed_amount'] = df_confirmed['SMS'].apply(extract_currency_float) 
     
-    pivot_summary = df_confirmed.groupby('assigned_accounting_category').agg( 
+    pivot_summary = df_confirmed.groupby('assigned_accounting_category').agg(
         transaction_count=('pipeline_status', 'count'), 
         total_volume_aed=('parsed_amount', 'sum'), 
         average_ticket_aed=('parsed_amount', 'mean') 
