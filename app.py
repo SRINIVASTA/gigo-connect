@@ -51,7 +51,7 @@ if not st.session_state.access_token:
             "scope": XERO_SCOPES,
             "state": "gigo_secure_state"
         }
-        auth_url = f"https://xero.com?{urlencode(params)}"
+        auth_url = f"https://login.xero.com/identity/connect/authorize?{urlencode(params)}"
         st.link_button("🔌 Connect Live Xero Demo Company Ledger", auth_url, type="primary")
         st.stop()
     else:
@@ -66,10 +66,10 @@ if not st.session_state.access_token:
             
             # Map Active Tenant ID Organization profile
             t_headers = {"Authorization": f"Bearer {st.session_state.access_token}", "Content-Type": "application/json"}
-            conn_res = requests.get("https://xero.com", headers=t_headers)
+            conn_res = requests.get("https://api.xero.com/connections", headers=t_headers)
             
             if conn_res.status_code == 200 and conn_res.json():
-                # 🛡️ THE CRITICAL ARRAYS FIX: Added explicit index [0] to open the list dictionary array object safely
+                # 🛡️ THE DEFINITIVE ARRAYS INDEX FIX: Explicitly target index [0] to extract values safely
                 connections_list = conn_res.json()
                 st.session_state.xero_tenant_id = connections_list[0]["tenantId"]
                 st.session_state.tenant_name = connections_list[0]["tenantName"]
