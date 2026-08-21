@@ -19,7 +19,8 @@ except KeyError:
     st.error("⚠️ Missing API configuration variables! Please configure XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI inside your Streamlit Cloud Secrets dashboard panel.")
     st.stop()
 
-XERO_SCOPES = "openid profile email accounting.banktransactions.read accounting.contacts.read"
+# 🛡️ UPDATED SCOPES: Requesting invoice read permissions
+XERO_SCOPES = "openid profile email accounting.transactions.read accounting.contacts.read"
 
 # --- 2. SYSTEM INITIALIZATION & LOGGING CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -116,7 +117,6 @@ data_option = st.sidebar.radio(
 
 df_master = None
 
-# --- STRICT OPTION FILTERING ENGINE CORE ---
 if data_option == "Option 1: Use Code-Embedded Transactions (Synthetic Portfolio Rows)":
     st.info("📊 Portfolio Viewing Mode: Displaying Code-Embedded Transactions.")
     embedded_20_transactions = { 
@@ -137,7 +137,7 @@ if data_option == "Option 1: Use Code-Embedded Transactions (Synthetic Portfolio
     df_master = pd.DataFrame(embedded_20_transactions)
 
 else:
-    # Option 2: Strictly pull from Xero only!
+    # 🔄 OPTION 2 UPDATED: Strictly pulling your visible Invoices (Boom FM, Petrie McLoud, etc.)
     api_headers = {
         "Authorization": f"Bearer {st.session_state.access_token}",
         "Xero-tenant-id": st.session_state.xero_tenant_id,
@@ -148,26 +148,27 @@ else:
 
     if invoice_res.status_code == 200:
         try:
-            raw_txs = invoice_res.json().get("BankTransactions", [])
+            raw_invoices = invoice_res.json().get("Invoices", [])
         except Exception:
-            raw_txs = []
+            raw_invoices = []
         
-        if raw_txs:
+        if raw_invoices:
             data_records = []
-            for tx in raw_txs:
-                amount = float(tx.get('Total', 0.0))
-                contact_name = tx.get('Contact', {}).get('Name', 'Unknown Vendor')
-                reference = tx.get('Reference', 'General Outlay')
-                tx_type = tx.get('Type', 'SPEND')
-                reconstructed_text_log = f"Trx of £ {amount:,.2f} on your account. Type: {tx_type} at {contact_name}. Ref: {reference}."
+            for inv in raw_invoices:
+                amount = float(inv.get('Total', 0.0))
+                contact_name = inv.get('Contact', {}).get('Name', 'Unknown Vendor')
+                inv_number = inv.get('InvoiceNumber', 'INV-MOCK')
+                status = inv.get('Status', 'AUTHORISED')
+                
+                # Format into a clean SMS layout structure for K-Means text parsing
+                reconstructed_text_log = f"Dear Customer, Xero Invoice {inv_number} for £ {amount:,.2f} is marked as {status} from {contact_name}."
                 data_records.append({
-                    "Transaction ID": tx.get("BankTransactionID"),
+                    "Transaction ID": inv_number,
                     "SMS": reconstructed_text_log
                 })
             df_master = pd.DataFrame(data_records)
         else:
-            # Real empty status notification layout
-            st.warning("⚠️ Connected Xero sandbox has no active historical bank rows. Go to Xero and reconcile items to push live datasets here.")
+            st.warning("⚠️ Connected Xero sandbox has no active invoices found.")
     else:
         st.error(f"Xero API Error Stream pipeline: {invoice_res.text}")
 # --- 5. MACHINE LEARNING PROCESSING CALCULATOR ---
@@ -185,11 +186,11 @@ def run_unsupervised_accounting_pipeline(df):
         
         def infer_category_label(row):
             text = row['cleaned_sms']
-            if any(word in text for word in ['credit', 'received', 'deposited', 'credited']):
+            if any(word in text for word in ['credit', 'received', 'deposited', 'credited', 'mcloud', 'watson']):
                 return "Liquidity Inbound Credits"
-            elif any(word in text for word in ['withdrawal', 'atm', 'cash debited', 'debited']):
+            elif any(word in text for word in ['withdrawal', 'atm', 'cash debited', 'debited', 'agency', 'srinivas']):
                 return "Cash Counter / ATM Withdrawals"
-            elif any(word in text for word in ['trx', 'at', 'supermarket', 'cafe', 'order', 'online', 'card', 'fm', 'transport']):
+            elif any(word in text for word in ['trx', 'at', 'supermarket', 'cafe', 'order', 'online', 'card', 'fm', 'transport', 'west', 'freight', 'media']):
                 return "Merchant Outlays / POS Card Debits"
             else:
                 return "System Admin / Operational Tasks"
