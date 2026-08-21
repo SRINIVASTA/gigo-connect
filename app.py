@@ -65,7 +65,6 @@ if not st.session_state.access_token:
             token_json = token_response.json()
             st.session_state.access_token = token_json["access_token"]
             
-            # Map Active Tenant ID Organization profile
             t_headers = {"Authorization": f"Bearer {st.session_state.access_token}", "Content-Type": "application/json"}
             conn_res = requests.get("https://xero.com", headers=t_headers)
             
@@ -99,7 +98,6 @@ if not st.session_state.access_token:
             st.error(f"OAuth Exchange Error: {token_response.text}")
             st.stop()
 
-# Display active sync tracking context banner layouts
 display_name = st.session_state.tenant_name if st.session_state.tenant_name else "Demo Company (Global)"
 st.success(f"🔒 Secure Core Pipeline Connection Active. Linked to Ledger: **{display_name}**")
 
@@ -142,7 +140,7 @@ if invoice_res.status_code == 200:
             })
         df_master = pd.DataFrame(data_records)
 
-# 🛡️ THE FIX: Arrays size matched exactly to 10 indices to ensure zero runtime matrix calculation crashes
+# 🛡️ THE CRITICAL GRAPH PIECE FIX: Injected 'Raw Amount' values directly into the synthetic matrix map columns list
 if df_master is None or df_master.empty:
     st.info("💡 Note: Live API ledger returns an empty data vector state. Ingesting matched row collections for portfolio dashboard visual rendering views.")
     embedded_20_transactions = { 
@@ -158,7 +156,8 @@ if df_master is None or df_master.empty:
             "Trx. of £ 541.25 on your account at Port & Philip Freight.", 
             "Trx. of £ 541.25 on your account at Rex Media Group.", 
             "Dear Customer, £ 817.01 was debited from your account by Srinivas T A."
-        ] 
+        ],
+        'Raw Amount': [2240.78, 3897.00, 541.25, 324.75, 104.40, 541.25, 541.25, 541.25, 541.25, 817.01]
     } 
     df_master = pd.DataFrame(embedded_20_transactions)
 # --- 6. MACHINE LEARNING PROCESSING CALCULATOR ---
