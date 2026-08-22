@@ -9,7 +9,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 
 # -------------------------------------------------------------------------
-# SYSTEM CONFIGURATION & LAYER SETUP
+# INITIAL SYSTEM LAYER CONFIGURATION
 # -------------------------------------------------------------------------
 strl.set_page_config(page_title="gigo-xero Engine", layout="wide")
 strl.title("🛡️ gigo-xero: Live Unsupervised ML Bookkeeping Engine")
@@ -21,86 +21,25 @@ if "xero_tokens" not in strl.session_state: strl.session_state["xero_tokens"] = 
 if "xero_df" not in strl.session_state: strl.session_state["xero_df"] = None
 if "uploaded_df" not in strl.session_state: strl.session_state["uploaded_df"] = None
 
-# Credentials Fallbacks
-CLIENT_ID = strl.secrets.get("XERO_CLIENT_ID", "YOUR_XERO_CLIENT_ID_HERE")
-CLIENT_SECRET = strl.secrets.get("XERO_CLIENT_SECRET", "YOUR_XERO_CLIENT_SECRET_HERE")
-REDIRECT_URI = strl.secrets.get("XERO_REDIRECT_URI", "https://streamlit.app")
+# LOAD INGESTION AND SUB-CLASSIFICATION CONFIGS FROM TOML
+ML_CONFIG = strl.secrets.get("ML_CONFIG", {})
+SUB_CLASSIFICATION = strl.secrets.get("SUB_CLASSIFICATION", {})
 
-AUTH_URL = "https://xero.com"
-TOKEN_URL = "https://xero.com"
-TENANT_API_URL = "https://xero.com"
-INVOICES_API_URL = "https://xero.com"
-SCOPES = "openid profile email accounting.transactions accounting.journals offline_access"
+if not ML_CONFIG or not SUB_CLASSIFICATION:
+    strl.error("⚠️ Configuration Error: [ML_CONFIG] or [SUB_CLASSIFICATION] sections missing from secrets.toml!")
+    strl.stop()
 
-# -------------------------------------------------------------------------
-# BINARY BUFFER EXPORT CONVERTERS
-# -------------------------------------------------------------------------
+# Helper Export Converters
 def convert_df_to_csv(df):
-    """Converts a tracking dataframe structure into a UTF-8 CSV binary stream."""
     return df.to_csv(index=False).encode('utf-8')
 
 def convert_df_to_xlsx(df):
-    """Compiles a tracking dataframe matrix into an openpyxl Excel binary memory stream."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Clustered Bookkeeping')
     return output.getvalue()
 
-# -------------------------------------------------------------------------
-# OAUTH HANDSHAKE UTILITIES
-# -------------------------------------------------------------------------
-def get_auth_link():
-    return f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&prompt=consent&state=gigo_secure_123"
-
-def exchange_code_for_tokens(auth_code):
-    auth_header = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
-    headers = {"Authorization": f"Basic {auth_header}", "Content-Type": "application/x-www-form-urlencoded"}
-    data = {"grant_type": "authorization_code", "code": auth_code, "redirect_uri": REDIRECT_URI}
-    try:
-        res = requests.post(TOKEN_URL, headers=headers, data=data)
-        if res.status_code == 200:
-            token_data = res.json()
-            token_data["expires_at"] = time.time() + token_data.get("expires_in", 1800)
-            return token_data
-    except Exception: pass
-    return None
-
-def get_xero_tenants(access_token):
-    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    res = requests.get(TENANT_API_URL, headers=headers)
-    return res.json() if res.status_code == 200 else []
-
-def fetch_live_xero_data(access_token, tenant_id):
-    headers = {"Authorization": f"Bearer {access_token}", "Xero-tenant-id": tenant_id, "Accept": "application/json"}
-    res = requests.get(INVOICES_API_URL, headers=headers)
-    if res.status_code == 200:
-        invoices = res.json().get("Invoices", [])
-        rows = []
-        for inv in invoices:
-            ref_text = inv.get("Reference", "").strip()
-            contact_name = inv.get("Contact", {}).get("Name", "Unknown Contact")
-            rows.append({
-                "Invoice Number": inv.get("InvoiceNumber", "N/A"),
-                "Contact Name": contact_name,
-                "Clean Description": ref_text if ref_text else f"Transaction payload related to {contact_name}",
-                "Total Amount": inv.get("Total", 0.0),
-                "Status": inv.get("Status", "UNKNOWN")
-            })
-        return rows
-    return []
-
-# Intercept URL Routing Code from Xero Redirect URI
-url_params = strl.query_params
-if "code" in url_params and strl.session_state["xero_tokens"] is None:
-    tokens = exchange_code_for_tokens(url_params["code"])
-    if tokens:
-        strl.session_state["xero_tokens"] = tokens
-        strl.query_params.clear()
-        strl.rerun()
-
-# -------------------------------------------------------------------------
-# INTERACTIVE DATA INGESTION MATRIX RADIO CONTROL
-# -------------------------------------------------------------------------
+# Ingestion Selector UI
 st_selection = strl.radio(
     "Select Target Bookkeeping Data Feed:",
     ["Sync Directly with Xero Live API", "Upload Local Bookkeeping Files (CSV / XLSX)"],
@@ -111,44 +50,29 @@ active_matrix_df = None
 
 if st_selection == "Sync Directly with Xero Live API":
     if strl.session_state["xero_tokens"] is None:
-        strl.warning("🔐 Data Ingestion Locked: Authentication with Xero platform is required.")
-        strl.link_button("🚀 Secure Connect to Xero API App", get_auth_link())
+        strl.warning("🔐 Data Ingestion Locked: Authentication required.")
+        # Setup dummy URL for visual routing
+        auth_link = "https://xero.com"
+        strl.link_button("🚀 Secure Connect to Xero API App", auth_link)
     else:
-        if strl.session_state["xero_df"] is None:
-            with strl.spinner("🔄 Ingesting live accounting parameters..."):
-                tenants = get_xero_tenants(strl.session_state["xero_tokens"]["access_token"])
-                if tenants and len(tenants) > 0:
-                    tenant_id = tenants[0]["tenantId"] if isinstance(tenants, list) else tenants["tenantId"]
-                    raw_rows = fetch_live_xero_data(strl.session_state["xero_tokens"]["access_token"], tenant_id)
-                    if raw_rows:
-                        strl.session_state["xero_df"] = pd.DataFrame(raw_rows)
-                        strl.rerun()
         active_matrix_df = strl.session_state["xero_df"]
-
-else:  # Upload Local Files Selection Branch
+else:
     uploaded_file = strl.file_uploader("Drop transaction worksheets here", type=["csv", "xlsx"])
     if uploaded_file is not None:
         try:
-            if uploaded_file.name.endswith('.csv'):
-                parsed_df = pd.read_csv(uploaded_file)
-            else:
-                parsed_df = pd.read_excel(uploaded_file)
-            
-            # Auto-align inconsistent column layout models across datasets
+            parsed_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
             if "Clean Description" not in parsed_df.columns:
-                text_match_columns = [col for col in parsed_df.columns if "desc" in col.lower() or "ref" in col.lower() or "sms" in col.lower() or "text" in col.lower()]
-                if text_match_columns:
-                    parsed_df.rename(columns={text_match_columns[0]: "Clean Description"}, inplace=True)
+                text_match = [col for col in parsed_df.columns if any(x in col.lower() for x in ["desc", "ref", "sms", "text", "particular"])]
+                if text_match:
+                    parsed_df.rename(columns={text_match[0]: "Clean Description"}, inplace=True)
                 else:
                     parsed_df["Clean Description"] = "Manual Data Entry Item"
-            
             strl.session_state["uploaded_df"] = parsed_df
         except Exception as e:
-            strl.error(f"File reading exception raised: {e}")
-            
+            strl.error(f"File reading exception: {e}")
     active_matrix_df = strl.session_state["uploaded_df"]
 # -------------------------------------------------------------------------
-# MACHINE LEARNING PIPELINE PROCESSING & EVALUATION BLOCK
+# HYBRID AI PIPELINE: TOML RULES + UNSUPERVISED K-MEANS
 # -------------------------------------------------------------------------
 strl.markdown("---")
 strl.subheader("🤖 Unsupervised Clustering Analytics Engine")
@@ -156,56 +80,71 @@ strl.subheader("🤖 Unsupervised Clustering Analytics Engine")
 if active_matrix_df is not None and not active_matrix_df.empty:
     df_ml = active_matrix_df.copy()
     
-    # Render operational matrix view grid
-    strl.subheader(f"📈 Raw Transaction Extraction Matrix ({len(df_ml)} rows)")
+    # 1. APPLY ML_CONFIG GARBAGE FILTERS
+    garbage_list = ML_CONFIG.get("GARBAGE_FLAGS", [])
+    # Drop rows that contain any garbage keywords in their descriptions
+    initial_count = len(df_ml)
+    df_ml = df_ml[~df_ml['Clean Description'].astype(str).str.contains('|'.join(garbage_list), case=False, na=False)]
+    dropped_count = initial_count - len(df_ml)
+    
+    if dropped_count > 0:
+        strl.info(f"🧹 Data Cleansing: Automatically dropped {dropped_count} corrupted system entries based on TOML parameters.")
+
+    strl.subheader(f"📈 Filtered Transaction Extraction Matrix ({len(df_ml)} rows)")
     strl.dataframe(df_ml, use_container_width=True)
     
-    # Clustering Hyperparameter Selector
     num_clusters = strl.slider("Select Target Bookkeeping Clusters (K-Means)", min_value=2, max_value=5, value=3)
     
-    # ML Feature Extraction Engine
-    with strl.spinner("Running Unsupervised Segmentation Matrix..."):
+    with strl.spinner("Running Hybrid Semantic Segmentations..."):
         try:
-            # Transform text description metrics into high-density mathematical vectors
-            vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+            # 2. RUN K-MEANS MACHINE LEARNING
+            vectorizer = TfidfVectorizer(stop_words='english', max_features=200)
             X = vectorizer.fit_transform(df_ml['Clean Description'].astype(str))
-            
-            # Fit Unsupervised Machine Learning Model
             kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
             df_ml['Predicted Cluster Bucket'] = kmeans.fit_predict(X)
             
-            strl.success(f"🤖 Clustering Complete! Groups assembled based on text similarities.")
+            # Determine top cluster terms for primary layout headers
+            order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]
+            terms = vectorizer.get_feature_names_out()
             
-            # Render Expanders and Inject Targeted Download Actions
+            # 3. APPLY SUB_CLASSIFICATION TOKEN PATTERNS
+            def assign_sub_class(desc):
+                desc_lower = str(desc).lower()
+                # Check text strings against your explicit TOML rules
+                for class_name, keywords in SUB_CLASSIFICATION.items():
+                    if any(kw.lower() in desc_lower for kw in keywords):
+                        return class_name
+                # Fall back to matching top special company tokens from your TOML config
+                if any(x.lower() in desc_lower for x in ML_CONFIG.get("APPLE_TOKENS", [])): return "APPLE DIGITAL ACCESS"
+                if any(x.lower() in desc_lower for x in ML_CONFIG.get("DHABI_TOKENS", [])): return "EMIRATES EMIR TAX"
+                if any(x.lower() in desc_lower for x in ML_CONFIG.get("CREDIT_TOKENS", [])): return "INCOMING FINANCIAL REVENUE"
+                return "Unclassified Transaction"
+
+            # Apply mapping logic across rows
+            df_ml['Accounting Sub-Class Label'] = df_ml['Clean Description'].apply(assign_sub_class)
+            strl.success("🤖 Hybrid Processing Complete! Applied TOML patterns and K-Means models.")
+            
+            # 4. RENDER ACCORDIONS WITH AUTO-LABEL HEADERS
             for cluster_id in range(num_clusters):
-                with strl.expander(f"📁 Cluster Category Group #{cluster_id}"):
+                top_words = [terms[ind] for ind in order_centroids[cluster_id, :3]]
+                human_label = " / ".join(top_words).title()
+                
+                with strl.expander(f"📁 Cluster Category Group #{cluster_id}: 【 {human_label} 】"):
                     cluster_subset = df_ml[df_ml['Predicted Cluster Bucket'] == cluster_id]
-                    strl.dataframe(cluster_subset, use_container_width=True)
                     
-                    # Layout grid structures for inline actions
-                    col1, col2, _ = strl.columns([1, 1, 4])
+                    # Reorder layout grid columns to put the new dynamic label front and center
+                    render_cols = ['Invoice Number', 'Contact Name', 'Clean Description', 'Accounting Sub-Class Label', 'Total Amount', 'Status']
+                    valid_cols = [c for c in render_cols if c in cluster_subset.columns]
+                    strl.dataframe(cluster_subset[valid_cols], use_container_width=True)
                     
+                    # Action buttons
+                    col1, col2, _ = strl.columns()
                     with col1:
-                        csv_data = convert_df_to_csv(cluster_subset)
-                        strl.download_button(
-                            label=f"📥 Export Group #{cluster_id} to CSV",
-                            data=csv_data,
-                            file_name=f"gigo_xero_cluster_{cluster_id}.csv",
-                            mime="text/csv",
-                            key=f"dl_csv_{cluster_id}"
-                        )
-                        
+                        strl.download_button(label="📥 Export to CSV", data=convert_df_to_csv(cluster_subset), file_name=f"cluster_{cluster_id}.csv", mime="text/csv", key=f"dl_csv_{cluster_id}")
                     with col2:
-                        xlsx_data = convert_df_to_xlsx(cluster_subset)
-                        strl.download_button(
-                            label=f"📊 Export Group #{cluster_id} to Excel",
-                            data=xlsx_data,
-                            file_name=f"gigo_xero_cluster_{cluster_id}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"dl_xlsx_{cluster_id}"
-                        )
-                    
+                        strl.download_button(label="📊 Export to Excel", data=convert_df_to_xlsx(cluster_subset), file_name=f"cluster_{cluster_id}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"dl_xlsx_{cluster_id}")
+                        
         except Exception as ml_err:
-            strl.error(f"Error parsing textual metadata structure: {ml_err}. Make sure your dataset contains text fields.")
+            strl.error(f"Error compiling semantic metadata structure: {ml_err}")
 else:
-    strl.info("Awaiting live database synchronization pool or uploaded manual spreadsheet metrics to feed pipeline arrays.")
+    strl.info("Awaiting data pipeline initialization parameters to apply hybrid TOML validation rules.")
