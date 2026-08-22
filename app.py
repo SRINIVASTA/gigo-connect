@@ -71,7 +71,7 @@ else:
             if "Clean Description" not in parsed_df.columns:
                 text_match = [col for col in parsed_df.columns if any(x in col.lower() for x in ["desc", "ref", "sms", "text", "particular", "msg"])]
                 if text_match:
-                    parsed_df.rename(columns={text_match[0]: "Clean Description"}, inplace=True)
+                    parsed_df.rename(columns={text_match: "Clean Description"}, inplace=True)
                 else:
                     parsed_df["Clean Description"] = "Manual Data Entry Item"
             strl.session_state["uploaded_df"] = parsed_df
@@ -97,18 +97,17 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     # BROAD EXTRACTOR: Scans deeply for common transaction value numeric headers
     amt_col = [col for col in df_ml.columns if any(x in col.lower() for x in ["amount", "total", "val", "amt", "debit", "credit", "price", "spent"])]
     if amt_col:
-        df_ml['Total Amount'] = pd.to_numeric(df_ml[amt_col[0]].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
+        df_ml['Total Amount'] = pd.to_numeric(df_ml[amt_col].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
     else:
-        # Emergency backup text scanner looks for numeric sub-strings inside the text itself if column headers are blank
-        df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)')[0].str.replace(',', '').astype(float).fillna(0.0)
+        df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)').str.replace(',', '').astype(float).fillna(0.0)
 
     # Auto-detect local transaction currency symbols
     curr_col = [col for col in df_ml.columns if "curr" in col.lower() or "symbol" in col.lower()]
-    currency_label = str(df_ml[curr_col[0]].iloc[0]).upper() if curr_col else "USD"
+    currency_label = str(df_ml[curr_col].iloc).upper() if curr_col else "USD"
 
-    # 1. RENDER GENERAL LEDGER METRICS SUMMARY (FIXED SPEC)
+    # 1. RENDER GENERAL LEDGER METRICS SUMMARY
     strl.subheader("📈 General Ledger Metrics Summary")
-    m_col1, m_col2, m_col3, m_col4 = strl.columns(4) # Passed explicit integer layout spec
+    m_col1, m_col2, m_col3, m_col4 = strl.columns(4)
     with m_col1:
         strl.metric("Total Extracted Records", f"{len(df_ml)}")
     with m_col2:
@@ -132,13 +131,13 @@ if active_matrix_df is not None and not active_matrix_df.empty:
 
     df_ml['Accounting Sub-Class Label'] = df_ml['Clean Description'].apply(assign_sub_class)
     
-    # 2. DATA ANALYTICS DISTRIBUTION VISUALIZATIONS (WITH PIE CHART)
+    # 2. DATA ANALYTICS DISTRIBUTION VISUALIZATIONS (WITH COUNT & VALUE)
     strl.subheader("📊 Data Analytics Distribution Visualizations")
-    v_col1, v_col2 = strl.columns(2) # Passed explicit integer layout spec
+    v_col1, v_col2 = strl.columns(2)
     
-    # Calculate Total Spending Values Grouped by Sub-Classification Labels
-    spending_by_label = df_ml.groupby('Accounting Sub-Class Label')['Total Amount'].sum().reset_index()
-    spending_by_label.columns = ['Accounting Sub-Class Label', 'Total Spending Value']
+    # CHANGED: Aggregated both total spending value (sum) and transaction items volume (count)
+    spending_by_label = df_ml.groupby('Accounting Sub-Class Label')['Total Amount'].agg(['sum', 'count']).reset_index()
+    spending_by_label.columns = ['Accounting Sub-Class Label', 'Total Spending Value', 'Transaction Count']
     
     with v_col1:
         strl.markdown(f"**Total Category Spending Share Allocation ({currency_label})**")
@@ -156,7 +155,10 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     with v_col2:
         strl.markdown(f"**Total Category Spending Values Table ({currency_label})**")
         display_spending = spending_by_label.copy()
+        # Format currency representation safely
         display_spending['Total Spending Value'] = display_spending['Total Spending Value'].apply(lambda x: f"{currency_label} {x:,.2f}")
+        # Re-arrange layout structure grid columns to emphasize counter columns
+        display_spending = display_spending[['Accounting Sub-Class Label', 'Transaction Count', 'Total Spending Value']]
         strl.dataframe(display_spending, use_container_width=True, hide_index=True)
 
     strl.markdown("---")
@@ -182,7 +184,6 @@ if active_matrix_df is not None and not active_matrix_df.empty:
                 cluster_subset = df_ml[df_ml['Predicted Cluster Bucket'] == cluster_id]
                 strl.dataframe(cluster_subset, use_container_width=True)
                 
-                # FIXED LAYOUT SPEC: Added explicit numeric matrix configuration parameters to column groups
                 act_col1, act_col2, act_col3 = strl.columns(3)
                 with act_col1:
                     strl.download_button(label="📥 Export to CSV", data=convert_df_to_csv(cluster_subset), file_name=f"cluster_{cluster_id}.csv", mime="text/csv", key=f"dl_csv_{cluster_id}")
