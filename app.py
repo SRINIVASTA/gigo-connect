@@ -6,7 +6,7 @@ import pandas as pd
 # Load configurations securely from Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-REDIRECT_URI = "https://streamlit.app"
+REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
@@ -37,7 +37,7 @@ def exchange_code_for_tokens(code_string):
             token_json = res.json()
             
             # Fetch connected tenant configurations
-            conn_url = "https://api.xero.com/connections"
+            conn_url = "https://xero.com"
             conn_headers = {
                 "Authorization": f"Bearer {token_json['access_token']}",
                 "Content-Type": "application/json"
@@ -95,40 +95,31 @@ if st.session_state.tokens and st.session_state.tenant_id:
             else:
                 st.error(f"API Error: {r.text}")
 
-# --- WORKSPACE PATH B: OFFLINE INITIALIZATION & AUTOMATED EXTRACTION ---
+# --- WORKSPACE PATH B: OFFLINE CLEAN INTERFACE ---
 else:
-    st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
+    st.info("Application Status: Offline. Connect your live Xero application below.")
     
     params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "scope": SCOPES,
-        "state": "gigo_agentic_stable_v4"
+        "state": "gigo_manual_stable"
     }
     auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
     
-    st.link_button(label="🔐 1. Complete Xero Handshake", url=auth_redirect_url, use_container_width=True)
+    st.link_button(label="🔐 1. Launch Xero Authorization Window", url=auth_redirect_url, use_container_width=True)
     
     st.markdown("---")
-    st.subheader("🛠️ Instant Link Fallback Connection")
-    st.caption("If your app stays offline after authorizing on Xero, copy the **entire URL address string** from your browser bar and paste it below:")
+    st.subheader("🛠️ Manual Activation Panel")
     
-    full_url_input = st.text_input("Paste your full browser landing URL here:", placeholder="https://gigo-connect-.../?code=xxx&scope=...")
+    manual_code = st.text_input(
+        "Paste the temporary authorization code here:", 
+        placeholder="Look at your browser's address bar after signing in..."
+    )
     
-    if st.button("⚡ 2. Connect via Landing URL Link", use_container_width=True):
-        if full_url_input:
-            try:
-                # Agentic parser handles isolating the auth token out of the string parameter list automatically
-                parsed_url = urllib.parse.urlparse(full_url_input)
-                url_parameters = urllib.parse.parse_qs(parsed_url.query)
-                
-                if "code" in url_parameters:
-                    target_auth_token = url_parameters["code"][0]
-                    exchange_code_for_tokens(target_auth_token)
-                else:
-                    st.error("Could not find a valid '?code=' parameter in that URL string. Please complete the login step again.")
-            except Exception as parse_err:
-                st.error(f"Could not parse URL text: {str(parse_err)}")
+    if st.button("⚡ 2. Complete Secure Handshake", use_container_width=True):
+        if manual_code:
+            exchange_code_for_tokens(manual_code)
         else:
-            st.error("Please provide a valid URL landing link address string.")
+            st.error("Please enter the authorization code provided by Xero.")
