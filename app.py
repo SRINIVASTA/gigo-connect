@@ -54,26 +54,67 @@ st_selection = strl.radio(
 
 active_matrix_df = None
 
+# Intercept URL Routing Code from Xero Redirect URI
+url_params = strl.query_params
+if "code" in url_params and strl.session_state["xero_tokens"] is None:
+    auth_header = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth_header}", "Content-Type": "application/x-www-form-urlencoded"}
+    data = {"grant_type": "authorization_code", "code": url_params["code"], "redirect_uri": REDIRECT_URI}
+    try:
+        res = requests.post(TOKEN_URL, headers=headers, data=data)
+        if res.status_code == 200:
+            token_data = res.json()
+            token_data["expires_at"] = time.time() + token_data.get("expires_in", 1800)
+            strl.session_state["xero_tokens"] = token_data
+            strl.query_params.clear()
+            strl.rerun()
+    except Exception: pass
+
 if st_selection == "Sync Directly with Xero Live API":
     if strl.session_state["xero_tokens"] is None:
         strl.warning("🔐 Data Ingestion Locked: Authentication required.")
-        auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&prompt=consent"
+        auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&prompt=consent&state=gigo_secure_123"
         strl.link_button("🚀 Secure Connect to Xero API App", auth_link)
     else:
+        if strl.session_state["xero_df"] is None:
+            with strl.spinner("🔄 Ingesting live accounting parameters..."):
+                headers = {"Authorization": f"Bearer {strl.session_state['xero_tokens']['access_token']}", "Content-Type": "application/json"}
+                res = requests.get(TENANT_API_URL, headers=headers)
+                if res.status_code == 200:
+                    tenants = res.json()
+                    # FIXED: Added explicit list element index parsing to resolve type evaluation crashes
+                    if tenants and isinstance(tenants, list) and len(tenants) > 0:
+                        tenant_id = tenants[0]["tenantId"]
+                        
+                        # Fetch invoices safely
+                        inv_headers = {"Authorization": f"Bearer {strl.session_state['xero_tokens']['access_token']}", "Xero-tenant-id": tenant_id, "Accept": "application/json"}
+                        inv_res = requests.get(INVOICES_API_URL, headers=inv_headers)
+                        if inv_res.status_code == 200:
+                            invoices = inv_res.json().get("Invoices", [])
+                            rows = []
+                            for inv in invoices:
+                                ref_text = inv.get("Reference", "").strip()
+                                contact_name = inv.get("Contact", {}).get("Name", "Unknown Contact")
+                                rows.append({
+                                    "Invoice Number": inv.get("InvoiceNumber", "N/A"),
+                                    "Contact Name": contact_name,
+                                    "Clean Description": ref_text if ref_text else f"Transaction payload related to {contact_name}",
+                                    "Total Amount": inv.get("Total", 0.0),
+                                    "Status": inv.get("Status", "UNKNOWN")
+                                })
+                            if rows:
+                                strl.session_state["xero_df"] = pd.DataFrame(rows)
+                                strl.rerun()
         active_matrix_df = strl.session_state["xero_df"]
 else:
     uploaded_file = strl.file_uploader("Drop transaction worksheets here", type=["csv", "xlsx"])
     if uploaded_file is not None:
         try:
             parsed_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-            
-            # FIXED: Correctly grab the exact string item instead of sending a list wrapper
             if "Clean Description" not in parsed_df.columns:
                 text_match = [col for col in parsed_df.columns if any(x in col.lower() for x in ["desc", "ref", "sms", "text", "particular", "msg"])]
                 if text_match:
-                    # Extracts the first clean string out of the array matching elements list
-                    actual_column_name = str(text_match[0])
-                    parsed_df.rename(columns={actual_column_name: "Clean Description"}, inplace=True)
+                    parsed_df.rename(columns={text_match[0]: "Clean Description"}, inplace=True)
                 else:
                     parsed_df["Clean Description"] = "Manual Data Entry Item"
             strl.session_state["uploaded_df"] = parsed_df
@@ -91,27 +132,23 @@ strl.markdown("---")
 if active_matrix_df is not None and not active_matrix_df.empty:
     df_ml = active_matrix_df.copy()
     
-    # Pre-flight check: If something went wrong above, ensure the description tracking column exists
     if "Clean Description" not in df_ml.columns:
         df_ml["Clean Description"] = "Manual Entry Data Line"
 
-    # Apply ML_CONFIG Garbage Cleaning Filters
+    # Clean out unwanted entries if configured in secrets
     garbage_list = ML_CONFIG.get("GARBAGE_FLAGS", [])
     if garbage_list:
         df_ml = df_ml[~df_ml['Clean Description'].astype(str).str.contains('|'.join(garbage_list), case=False, na=False)]
 
-    # BROAD EXTRACTOR: Scans deeply for common transaction value numeric headers
+    # Dynamic value extraction mapping
     amt_col = [col for col in df_ml.columns if any(x in col.lower() for x in ["amount", "total", "val", "amt", "debit", "credit", "price", "spent"])]
     if amt_col:
-        actual_amt_header = str(amt_col[0])
-        df_ml['Total Amount'] = pd.to_numeric(df_ml[actual_amt_header].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
+        df_ml['Total Amount'] = pd.to_numeric(df_ml[amt_col[0]].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
     else:
-        # Regex text scanner extracts digits out of text strings if currency column is completely absent
-        df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)')[0].str.replace(',', '', regex=False).astype(float).fillna(0.0)
+        df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)').str.replace(',', '', regex=False).astype(float).fillna(0.0)
 
-    # Auto-detect local transaction currency symbols
     curr_col = [col for col in df_ml.columns if "curr" in col.lower() or "symbol" in col.lower()]
-    currency_label = str(df_ml[curr_col].iloc[0]).upper() if curr_col else "USD"
+    currency_label = str(df_ml[curr_col[0]].iloc[0]).upper() if curr_col else "USD"
 
     # 1. RENDER GENERAL LEDGER METRICS SUMMARY
     strl.subheader("📈 General Ledger Metrics Summary")
@@ -127,7 +164,6 @@ if active_matrix_df is not None and not active_matrix_df.empty:
 
     strl.markdown("---")
     
-    # Sub-classification tag mappings handler based on your secrets.toml definitions
     def assign_sub_class(desc):
         desc_lower = str(desc).lower()
         for class_name, keywords in SUB_CLASSIFICATION.items():
@@ -139,11 +175,10 @@ if active_matrix_df is not None and not active_matrix_df.empty:
 
     df_ml['Accounting Sub-Class Label'] = df_ml['Clean Description'].apply(assign_sub_class)
     
-    # 2. DATA ANALYTICS DISTRIBUTION VISUALIZATIONS (WITH COUNT & VALUE)
+    # 2. DATA ANALYTICS DISTRIBUTION VISUALIZATIONS
     strl.subheader("📊 Data Analytics Distribution Visualizations")
     v_col1, v_col2 = strl.columns(2)
     
-    # Aggregated both total spending value (sum) and transaction items volume (count)
     spending_by_label = df_ml.groupby('Accounting Sub-Class Label')['Total Amount'].agg(['sum', 'count']).reset_index()
     spending_by_label.columns = ['Accounting Sub-Class Label', 'Total Spending Value', 'Transaction Count']
     
@@ -190,7 +225,7 @@ if active_matrix_df is not None and not active_matrix_df.empty:
                 cluster_subset = df_ml[df_ml['Predicted Cluster Bucket'] == cluster_id]
                 strl.dataframe(cluster_subset, use_container_width=True)
                 
-                act_col1, act_col2, act_col3 = strl.columns(3)
+                act_col1, act_col2, _ = strl.columns(3)
                 with act_col1:
                     strl.download_button(label="📥 Export to CSV", data=convert_df_to_csv(cluster_subset), file_name=f"cluster_{cluster_id}.csv", mime="text/csv", key=f"dl_csv_{cluster_id}")
                 with act_col2:
