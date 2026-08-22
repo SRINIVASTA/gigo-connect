@@ -5,11 +5,10 @@ import requests
 import base64
 import time
 import io
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import KMeans
+import plotly.express as px  # REQUIRED for advanced Pie Chart rendering
 
 # -------------------------------------------------------------------------
-# SYSTEM CONFIGURATION & INTERFACE RE-BRANDING
+# SYSTEM CONFIGURATION & RE-BRANDING INITIALIZATION
 # -------------------------------------------------------------------------
 strl.set_page_config(page_title="gigo-xero Engine", layout="wide")
 strl.title("📊 Unsupervised Xero ML Bookkeeping & Analytics Engine")
@@ -78,8 +77,11 @@ else:
             strl.error(f"File reading exception: {e}")
     active_matrix_df = strl.session_state["uploaded_df"]
 # -------------------------------------------------------------------------
-# METRICS SUMMARY, VISUALIZATIONS & SPREADSHEET EXPLORER BLOCK
+# METRICS SUMMARY, PIE VISUALIZATIONS & SPENDING VALUE CALCULATOR BLOCK
 # -------------------------------------------------------------------------
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
+
 strl.markdown("---")
 
 if active_matrix_df is not None and not active_matrix_df.empty:
@@ -90,12 +92,16 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     if garbage_list:
         df_ml = df_ml[~df_ml['Clean Description'].astype(str).str.contains('|'.join(garbage_list), case=False, na=False)]
 
-    # Clean Amount column formatting dynamically for analytics charts mapping
+    # Dynamic Currency / Amount parser logic
     amt_col = [col for col in df_ml.columns if "amount" in col.lower() or "total" in col.lower() or "val" in col.lower()]
     if amt_col:
         df_ml['Total Amount'] = pd.to_numeric(df_ml[amt_col[0]].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
     else:
         df_ml['Total Amount'] = 0.0
+
+    # Auto-detect local transaction currency symbols
+    curr_col = [col for col in df_ml.columns if "curr" in col.lower() or "symbol" in col.lower()]
+    currency_label = str(df_ml[curr_col[0]].iloc[0]).upper() if curr_col else "USD"
 
     # 1. RENDER GENERAL LEDGER METRICS SUMMARY
     strl.subheader("📈 General Ledger Metrics Summary")
@@ -103,56 +109,67 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     with m_col1:
         strl.metric("Total Extracted Records", f"{len(df_ml)}")
     with m_col2:
-        strl.metric("Gross Financial Velocity", f"USD {df_ml['Total Amount'].sum():,.2f}")
+        strl.metric("Gross Financial Velocity", f"{currency_label} {df_ml['Total Amount'].sum():,.2f}")
     with m_col3:
-        strl.metric("Average Invoiced Ticket", f"USD {df_ml['Total Amount'].mean():,.2f}")
+        strl.metric("Average Invoiced Ticket", f"{currency_label} {df_ml['Total Amount'].mean():,.2f}")
     with m_col4:
         strl.metric("Data Quality Consistency (Anti-GIGO)", "100%")
 
     strl.markdown("---")
     
-    # K-Means clustering configuration setup hooks
+    # Sub-classification tag mappings handler based on your secrets.toml definitions
+    def assign_sub_class(desc):
+        desc_lower = str(desc).lower()
+        for class_name, keywords in SUB_CLASSIFICATION.items():
+            if any(kw.lower() in desc_lower for kw in keywords): return class_name
+        if any(x.lower() in desc_lower for x in ML_CONFIG.get("APPLE_TOKENS", [])): return "APPLE DIGITAL"
+        if any(x.lower() in desc_lower for x in ML_CONFIG.get("DHABI_TOKENS", [])): return "ABU DHABI EMIR"
+        if any(x.lower() in desc_lower for x in ML_CONFIG.get("CREDIT_TOKENS", [])): return "INCOMING CREDIT"
+        return "General Unclassified"
+
+    df_ml['Accounting Sub-Class Label'] = df_ml['Clean Description'].apply(assign_sub_class)
+    
+    # 2. DATA ANALYTICS DISTRIBUTION VISUALIZATIONS (WITH PIE CHART)
+    strl.subheader("📊 Data Analytics Distribution Visualizations")
+    v_col1, v_col2 = strl.columns(2)
+    
+    # Calculate Total Spending Values Grouped by Sub-Classification Labels
+    spending_by_label = df_ml.groupby('Accounting Sub-Class Label')['Total Amount'].sum().reset_index()
+    spending_by_label.columns = ['Accounting Sub-Class Label', 'Total Spending Value']
+    
+    with v_col1:
+        strl.markdown(f"**Total Category Spending Share Allocation ({currency_label})**")
+        # Creating a dynamic interactive pie chart
+        fig_pie = px.pie(
+            spending_by_label, 
+            values='Total Spending Value', 
+            names='Accounting Sub-Class Label',
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+        fig_pie.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=True)
+        strl.plotly_chart(fig_pie, use_container_width=True)
+        
+    with v_col2:
+        strl.markdown(f"**Total Category Spending Values Table ({currency_label})**")
+        # Format values as display-ready transaction currencies
+        display_spending = spending_by_label.copy()
+        display_spending['Total Spending Value'] = display_spending['Total Spending Value'].apply(lambda x: f"{currency_label} {x:,.2f}")
+        strl.dataframe(display_spending, use_container_width=True, hide_index=True)
+
+    strl.markdown("---")
+    
+    # 3. COMPILING THE LIVE SPREADSHEET VIEW EXPLORER WITH ML CLUSTERING
+    strl.subheader("📋 Live Spreadsheet View Explorer")
     num_clusters = strl.slider("Select Target Bookkeeping Clusters (K-Means)", min_value=2, max_value=5, value=3)
     
     try:
-        # Run Vectorizer Modeling 
         vectorizer = TfidfVectorizer(stop_words='english', max_features=200)
         X = vectorizer.fit_transform(df_ml['Clean Description'].astype(str))
         kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
         df_ml['Predicted Cluster Bucket'] = kmeans.fit_predict(X)
         
-        # Sub-classification tag mappings handler loop
-        def assign_sub_class(desc):
-            desc_lower = str(desc).lower()
-            for class_name, keywords in SUB_CLASSIFICATION.items():
-                if any(kw.lower() in desc_lower for kw in keywords): return class_name
-            if any(x.lower() in desc_lower for x in ML_CONFIG.get("APPLE_TOKENS", [])): return "APPLE DIGITAL"
-            if any(x.lower() in desc_lower for x in ML_CONFIG.get("DHABI_TOKENS", [])): return "ABU DHABI EMIR"
-            if any(x.lower() in desc_lower for x in ML_CONFIG.get("CREDIT_TOKENS", [])): return "INCOMING CREDIT"
-            return "General Unclassified"
-
-        df_ml['Accounting Sub-Class Label'] = df_ml['Clean Description'].apply(assign_sub_class)
-        
-        # 2. DATA ANALYTICS DISTRIBUTION VISUALIZATIONS
-        strl.subheader("📊 Data Analytics Distribution Visualizations")
-        v_col1, v_col2 = strl.columns(2)
-        
-        with v_col1:
-            strl.markdown("**Transaction Frequency by Sub-Classification Model**")
-            subclass_counts = df_ml['Accounting Sub-Class Label'].value_counts()
-            strl.bar_chart(subclass_counts)
-            
-        with v_col2:
-            strl.markdown("**Volume Footprint Density per AI Cluster Group**")
-            cluster_volumes = df_ml.groupby('Predicted Cluster Bucket')['Total Amount'].sum()
-            strl.bar_chart(cluster_volumes)
-
-        strl.markdown("---")
-        
-        # 3. COMPILING THE LIVE SPREADSHEET VIEW EXPLORER
-        strl.subheader("📋 Live Spreadsheet View Explorer")
-        
-        # Re-map centroids keywords mapping arrays back to label expanders
         order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]
         terms = vectorizer.get_feature_names_out()
         
@@ -162,11 +179,9 @@ if active_matrix_df is not None and not active_matrix_df.empty:
             
             with strl.expander(f"📁 Cluster Category Group #{cluster_id}: 【 {human_label} 】"):
                 cluster_subset = df_ml[df_ml['Predicted Cluster Bucket'] == cluster_id]
-                
-                # Render standalone spreadsheet framework inside this segment container row
                 strl.dataframe(cluster_subset, use_container_width=True)
                 
-                # Dynamic buffer file download action links handles setup loops
+                # Dynamic buffer file downloads
                 act_col1, act_col2, _ = strl.columns()
                 with act_col1:
                     strl.download_button(label="📥 Export to CSV", data=convert_df_to_csv(cluster_subset), file_name=f"cluster_{cluster_id}.csv", mime="text/csv", key=f"dl_csv_{cluster_id}")
@@ -174,15 +189,15 @@ if active_matrix_df is not None and not active_matrix_df.empty:
                     strl.download_button(label="📊 Export to Excel", data=convert_df_to_xlsx(cluster_subset), file_name=f"cluster_{cluster_id}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"dl_xlsx_{cluster_id}")
 
     except Exception as ml_err:
-        strl.error(f"Error compiling semantic analytics framework visualization layers: {ml_err}")
+        strl.error(f"Error compiling semantic analytics framework: {ml_err}")
 
 else:
-    # 4. INITIAL EMPTY STATUS VIEW INTERFACE FOR EMPTY INPUTS
+    # INITIAL EMPTY STATUS VIEW INTERFACE FOR EMPTY INPUTS
     strl.subheader("📈 General Ledger Metrics Summary")
     strl.info("Metrics Summary tracking matrix is currently unpopulated.")
     
     strl.subheader("📊 Data Analytics Distribution Visualizations")
-    strl.info("0 charts loaded.")
+    strl.info("0 analytical distributions computed. Pie charts and category values will render here upon dataset ingestion.")
     
     strl.subheader("📋 Live Spreadsheet View Explorer")
     strl.info("Awaiting live database synchronization pool or uploaded manual spreadsheet metrics to feed pipeline arrays.")
