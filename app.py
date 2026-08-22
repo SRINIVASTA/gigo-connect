@@ -169,7 +169,7 @@ GIGO_ROWS = [
 ]
 
 # -------------------------------------------------------------------------
-# INTERACTIVE TERMINAL ENGINE UI (FIXED VIA INJECTED NATIVE HTML ESCAPE)
+# INTERACTIVE TERMINAL ENGINE UI (FIXED VIA UNBLOCKABLE NEW-TAB ROUTING)
 # -------------------------------------------------------------------------
 strl.sidebar.header("🔑 Xero Live Auth Gateway")
 
@@ -193,18 +193,18 @@ except Exception:
 if not strl.session_state.xero_tokens:
     strl.warning("🔐 **Application Securely Locked**: Connection to Xero API is required to open this dashboard.")
     
-    # FIX: Using st.html to inject raw JavaScript window.top redirection. 
-    # This completely overrides Streamlit's iframe blocking layout bug.
-    strl.html(f"""
-        <div style="text-align: center; margin-top: 20px;">
-            <button onclick="window.top.location.href='{get_auth_link()}'" 
-                    style="background-color: #1363DF; color: white; padding: 14px 28px; 
-                           text-align: center; border-radius: 6px; font-weight: bold; 
-                           font-size: 16px; border: none; cursor: pointer; width: 100%;">
-                🔗 Secure Connect to Xero API App
-            </button>
-        </div>
-    """)
+    # CRITICAL FIX: Standard HTML anchor element forced to target a fresh un-sandboxed tab (_blank)
+    # This prevents the secure browser layer from timing out or dropping click signals.
+    strl.markdown(
+        f'<div style="text-align: center; margin-top: 15px; margin-bottom: 15px;">'
+        f'<a href="{get_auth_link()}" target="_blank" style="text-decoration: none;">'
+        f'<div style="background-color: #1363DF; color: white; padding: 14px 28px; '
+        f'text-align: center; border-radius: 6px; font-weight: bold; '
+        f'font-size: 16px; border: none; box-shadow: 0px 4px 10px rgba(0,0,0,0.15); display: inline-block;">'
+        f'🚀 Secure Connect to Xero API App'
+        f'</div></a></div>', 
+        unsafe_allow_html=True
+    )
     strl.stop()
 else:
     if check_and_ensure_auth():
