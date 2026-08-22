@@ -144,8 +144,26 @@ else:
     encoded_params = urllib.parse.urlencode(params)
     auth_redirect_url = f"https://xero.com?{encoded_params}"
     
-    # FIX: target="_blank" forces the browser to open the Xero gateway in a fresh tab
-    st.markdown(
-        f'<a href="{auth_redirect_url}" target="_blank" style="display: inline-block; padding: 0.6em 1.3em; color: white; background-color: #00b7e2; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔐 Complete Xero Handshake</a>',
-        unsafe_allow_html=True
-    )
+    # Create two columns to handle the user flow smoothly
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        # The primary login action button
+        st.markdown(
+            f'<a href="{auth_redirect_url}" target="_blank" style="display: inline-block; padding: 0.6em 1.3em; color: white; background-color: #00b7e2; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔐 Launch Xero Login</a>',
+            unsafe_allow_html=True
+        )
+        
+    with col2:
+        # A manual sync button for Window 1 to pick up changes if it feels stuck
+        if st.button("🔄 Sync & Refresh App Data"):
+            st.rerun()
+
+    # Clear instructions to prevent user confusion across tabs
+    st.markdown("""
+    ---
+    💡 **What to expect next:**
+    1. Clicking the launch button opens Xero's secure login portal in a **new tab**.
+    2. Log in and select your **Demo Company (Global)**.
+    3. Once authorized, that new tab will load your active data hub. You can safely close this original idle window!
+    """)
