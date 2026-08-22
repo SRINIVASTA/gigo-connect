@@ -25,15 +25,15 @@ if "xero_tenant_name" not in st.session_state:
 # Extract current active URL queries
 query_params = st.query_params
 
-# --- INTERCEPT CALLBACK: AGENTIC SECURE CHECK ---
+# --- INTERCEPT CALLBACK FROM XERO ---
 if "code" in query_params and st.session_state.xero_tokens is None:
     auth_code = query_params["code"]
     
-    st.warning("⚠️ Action Required: Xero has authorized your connection!")
-    st.write("Click the button below to process your temporary access tokens and lock in your session data tables.")
+    st.warning("⚠️ Action Required: Xero has successfully authorized your connection!")
+    st.write("Click the button below to process your access tokens and launch your data dashboards.")
     
     if st.button("🚀 Finalize and Load My Dashboard Data", type="primary"):
-        with st.spinner("Exchanging secure token handshakes with Xero API infrastructure..."):
+        with st.spinner("Exchanging secure token handshakes with Xero API..."):
             token_url = "https://xero.com"
             payload = {
                 "grant_type": "authorization_code",
@@ -64,26 +64,21 @@ if "code" in query_params and st.session_state.xero_tokens is None:
                         connections = conn_response.json()
                         
                         if isinstance(connections, list) and len(connections) > 0:
-                            # Safely isolate index dict 0 mapping arrays
                             primary_connection = connections[0]
                             st.session_state.xero_tenant_id = primary_connection["tenantId"]
                             st.session_state.xero_tenant_name = primary_connection.get("tenantName", "Demo Company")
                             
                             st.success(f"✅ Success! Connected to: {st.session_state.xero_tenant_name}")
-                            
-                            # Clean the browser URL bar now that tokens are securely saved
-                            st.query_params.clear()
                             st.rerun()
                         else:
-                            st.error("❌ Authentication succeeded, but no linked company profiles were found in this account.")
+                            st.error("❌ Authentication succeeded, but no linked company profiles were found.")
                     else:
                         st.error(f"❌ Connection Discovery Failure: {conn_response.text}")
                 else:
                     st.error(f"❌ Token Exchange Failure (HTTP {token_response.status_code}): {token_response.text}")
-                    st.info("💡 Tip: Authorization codes expire in under 5 minutes. Try restarting the handshake process.")
                     
             except Exception as e:
-                st.error(f"An unexpected networking exception occurred: {str(e)}")
+                st.error(f"An unexpected networking error occurred: {str(e)}")
 
 # --- STATE 3: DATA RETRIEVAL ACTIVE HUB ---
 if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
@@ -94,7 +89,6 @@ if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
         st.session_state.xero_tokens = None
         st.session_state.xero_tenant_id = None
         st.session_state.xero_tenant_name = None
-        st.query_params.clear()
         st.rerun()
 
     # Create UI workspace layouts
@@ -137,21 +131,23 @@ if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
                     st.error(f"API Error ({resp.status_code}): {resp.text}")
 
 # --- STATE 1: OFFLINE INITIAL SCREEN ---
-elif not ("code" in query_params):
-    st.info("Your application context is currently offline. Connect to Xero securely below.")
-    
-    params = {
-        "response_type": "code",
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "scope": SCOPES,
-        "state": "gigo_secure_state_987"
-    }
-    encoded_params = urllib.parse.urlencode(params)
-    auth_redirect_url = f"https://xero.com?{encoded_params}"
-    
-    st.page_link(
-        page=auth_redirect_url,
-        label="🔐 Complete Xero Handshake",
-        icon="🔑"
-    )
+else:
+    if not ("code" in query_params):
+        st.info("Your application context is currently offline. Connect to Xero securely below.")
+        
+        params = {
+            "response_type": "code",
+            "client_id": CLIENT_ID,
+            "redirect_uri": REDIRECT_URI,
+            "scope": SCOPES,
+            "state": "gigo_secure_state_987"
+        }
+        encoded_params = urllib.parse.urlencode(params)
+        auth_redirect_url = f"https://xero.com?{encoded_params}"
+        
+        # AGENTIC IMPLEMENTATION: Official native link button to trigger clean external OAuth redirecting
+        st.link_button(
+            label="🔐 Complete Xero Handshake",
+            url=auth_redirect_url,
+            use_container_width=False
+        )
