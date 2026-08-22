@@ -169,25 +169,26 @@ def fetch_live_xero_data(access_token, tenant_id):
     return []
 
 # -------------------------------------------------------------------------
-# EXECUTION MANAGEMENT & NAVIGATION TRACKER
+# EXECUTION MANAGEMENT & PARAMETER TRACKER
 # -------------------------------------------------------------------------
 if "xero_tokens" not in strl.session_state:
     strl.session_state.xero_tokens = None
 
-# Monitor current web query strings for incoming auth signals
+# Monitor current browser navigation params safely
 url_params = strl.query_params
 
-if "code" in url_params and not strl.session_state.xero_tokens:
+if "code" in url_params and strl.session_state.xero_tokens is None:
     auth_code = url_params["code"]
-    with strl.spinner("🔄 Exchanging Active Handshake Credentials..."):
-        tokens = exchange_code_for_tokens(auth_code)
-        if tokens:
-            strl.session_state.xero_tokens = tokens
-            strl.query_params.clear()  # Purges parameters from UI path address bar
-            strl.rerun()
+    tokens = exchange_code_for_tokens(auth_code)
+    if tokens:
+        strl.session_state.xero_tokens = tokens
+        # Safe URL Parameter replacement prevents looping re-execution bugs
+        strl.query_params.clear()
+        strl.status("🔄 Initial Sync Completed. Reloading Data Gateway...")
+        strl.rerun()
 
-# Streamlit Render Decision Matrix
-if not strl.session_state.xero_tokens:
+# Workspace View Router Decisions
+if strl.session_state.xero_tokens is None:
     strl.warning("🔐 Application Securely Locked: Connection to Xero API is required to open this dashboard.")
     auth_link = get_auth_link()
     strl.link_button("🚀 Secure Connect to Xero API App", auth_link)
@@ -196,9 +197,9 @@ else:
         access_token = strl.session_state.xero_tokens["access_token"]
         
         tenants = get_xero_tenants(access_token)
-        if tenants:
-            # Safely capture target connected profile indices
-            first_tenant = tenants[0] if isinstance(tenants, list) else tenants
+        # BUG FIX: Ensure tenants list exists and index correctly
+        if tenants and isinstance(tenants, list) and len(tenants) > 0:
+            first_tenant = tenants[0]
             tenant_id = first_tenant["tenantId"]
             tenant_name = first_tenant.get("tenantName", "Xero Account Organization")
             
@@ -212,42 +213,36 @@ else:
                     strl.subheader(f"📈 Transaction Extraction Matrix ({len(df)} rows)")
                     strl.dataframe(df, use_container_width=True)
                     
-                    # Store data in session state for the ML extension processing module
+                    # Store data state globally for ML evaluation module
                     strl.session_state["extracted_df"] = df
-                    strl.info("👉 Ready to run the machine learning modeling logic block below!")
-                    
                 else:
                     strl.info("Connected successfully! However, there are no invoices available inside this specific organization.")
         else:
-            strl.error("No organization attachments found. Try clearing your browser session and logging in again.")
+            strl.error("No active organizations found. Please verify that your Demo Company box is checked on Xero's consent page.")
 # -------------------------------------------------------------------------
 # STANDALONE UNSUPERVISED MACHINE LEARNING PROCESSING MODULE
 # -------------------------------------------------------------------------
-import streamlit as strl
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import KMeans
-
 strl.markdown("---")
 strl.subheader("🤖 Unsupervised Clustering Analytics Engine")
 
-# Check if data exists from the block above
-if "extracted_df" in strl.session_state and not strl.session_state["extracted_df"].empty:
+# Fetch structured dataframe from the data storage layer
+if "extracted_df" in strl.session_state and strl.session_state["extracted_df"] is not None and not strl.session_state["extracted_df"].empty:
     df_ml = strl.session_state["extracted_df"].copy()
     
-    # Parameter Controls
+    # Clustering Dashboard Parameters
     num_clusters = strl.slider("Select Target Bookkeeping Clusters (K-Means)", min_value=2, max_value=5, value=3)
     
-    # Text Processing Matrix
+    # Text Analysis Engineering
     vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
     X = vectorizer.fit_transform(df_ml['Clean Description'])
     
-    # Execute Unsupervised Segmentation Modeling
+    # Execute Model Predictions
     kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
     df_ml['Predicted Cluster Bucket'] = kmeans.fit_predict(X)
     
-    # Output Display
-    strl.success(f"🤖 Machine Learning Clustering Finished! Categorized transactions into {num_clusters} semantic groupings.")
+    strl.success(f"🤖 Machine Learning Completed! Grouped transactions into {num_clusters} financial clusters.")
     
+    # Output Cluster Segments
     for cluster_id in range(num_clusters):
         with strl.expander(f"📁 Cluster Category Group #{cluster_id}"):
             cluster_subset = df_ml[df_ml['Predicted Cluster Bucket'] == cluster_id]
