@@ -167,3 +167,12 @@ else:
     2. Log in and select your **Demo Company (Global)**.
     3. Once authorized, that new tab will load your active data hub. You can safely close this original idle window!
     """)
+# This forces the browser window to navigate directly away from Streamlit to Xero
+st.components.v1.html(
+    f"""
+    <script>
+        window.top.location.href = "{auth_redirect_url}";
+    </script>
+    """,
+    height=0
+)
