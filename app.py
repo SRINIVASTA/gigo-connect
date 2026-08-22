@@ -169,7 +169,7 @@ GIGO_ROWS = [
 ]
 
 # -------------------------------------------------------------------------
-# INTERACTIVE TERMINAL ENGINE UI
+# INTERACTIVE TERMINAL ENGINE UI (CRITICAL TARGET FIX FOR IFRAMES)
 # -------------------------------------------------------------------------
 strl.sidebar.header("🔑 Xero Live Auth Gateway")
 
@@ -192,10 +192,11 @@ except Exception:
 
 if not strl.session_state.xero_tokens:
     strl.warning("🔐 **Application Securely Locked**: Connection to Xero API is required to open this dashboard.")
+    # FIXED: Added target="_top" style declaration to completely force a clean parent window redirect
     strl.markdown(
-        f'<a href="{get_auth_link()}" target="_self" style="text-decoration:none;">'
+        f'<a href="{get_auth_link()}" target="_top" style="text-decoration:none;">'
         f'<div style="background-color:#1363DF;color:white;padding:12px 24px;text-align:center;'
-        f'border-radius:6px;font-weight:bold;font-size:16px;">🔗 Secure Connect to Xero API App</div></a>', 
+        f'border-radius:6px;font-weight:bold;font-size:16px;cursor:pointer;">🔗 Secure Connect to Xero API App</div></a>', 
         unsafe_allow_html=True
     )
     strl.stop()
@@ -272,7 +273,7 @@ if working_df is not None:
         working_df["Cluster ID"] = kmeans.fit_predict(tfidf_matrix)
         
         # Layer 4: Deterministic Post-Cluster Rules Correction Engine
-        strl.markdown("### ⚙️ Layer 4: Post-Cluster Rules Validation Grid")
+        strl.markdown("### ⚙️ Layer 4: Post-Cluster Rules Correction Engine")
         def deterministic_correction(row):
             desc = str(row["Raw Description"]).upper()
             current_cluster = row["Cluster ID"]
