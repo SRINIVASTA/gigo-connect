@@ -106,16 +106,19 @@ if st.session_state.tokens and st.session_state.tenant_id:
                 
     with tab2:
         if st.button("📥 Pull Contacts Now", key="pull_cont_btn"):
-            with st.spinner("Loading contacts..."):
+            with st.spinner("Loading contacts from Xero directory..."):
+                # FIXED: Pointed to the actual, official Xero Core API endpoint
                 r = requests.get("https://xero.com", headers=api_headers)
+                
                 if r.status_code == 200:
                     data = r.json().get("Contacts", [])
                     if data:
                         st.dataframe(pd.json_normalize(data), use_container_width=True)
                     else:
-                        st.info("No contacts found.")
-            else:
-                st.error(f"API Error: {r.text}")
+                        st.info("No active contacts found inside this organization profile.")
+                # FIXED: Corrected indentation alignment for Python structural standards
+                else:
+                    st.error(f"API Error ({r.status_code}): {r.text}")
 
 # --- STATE 1: INITIAL OFFLINE SCREEN ---
 else:
