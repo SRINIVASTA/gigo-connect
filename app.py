@@ -8,13 +8,13 @@ CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 REDIRECT_URI = "https://streamlit.app"
 
-# Scopes needed to fetch organization names, invoices, and contacts
+# Complete scope credentials required to read your Demo Ledger
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
 
 st.set_page_config(page_title="Gigo Connect", page_icon="🔗", layout="wide")
 st.title("🔗 Gigo Connect x Xero Integration")
 
-# Initialize persistent session memory
+# Initialize persistent session tracking structures
 if "xero_tokens" not in st.session_state:
     st.session_state.xero_tokens = None
 if "xero_tenant_id" not in st.session_state:
@@ -22,80 +22,84 @@ if "xero_tenant_id" not in st.session_state:
 if "xero_tenant_name" not in st.session_state:
     st.session_state.xero_tenant_name = None
 
-# --- STATE 2: DETECT AND INTERCEPT OAUTH CALLBACK FROM XERO ---
+# Extract current active URL queries
 query_params = st.query_params
 
+# --- INTERCEPT CALLBACK: AGENTIC SECURE CHECK ---
 if "code" in query_params and st.session_state.xero_tokens is None:
     auth_code = query_params["code"]
-    st.info("🔄 Found Auth Code! Exchanging token pairs with Xero...")
     
-    # Post request payload to exchange code for structural access tokens
-    token_url = "https://xero.com"
-    payload = {
-        "grant_type": "authorization_code",
-        "code": auth_code,
-        "redirect_uri": REDIRECT_URI,
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET
-    }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    st.warning("⚠️ Action Required: Xero has authorized your connection!")
+    st.write("Click the button below to process your temporary access tokens and lock in your session data tables.")
     
-    try:
-        token_response = requests.post(token_url, data=payload, headers=headers)
-        
-        if token_response.status_code == 200:
-            tokens = token_response.json()
-            st.session_state.xero_tokens = tokens  # Contains access_token and refresh_token
-            
-            # Xero Identity Connection discovery (returns a LIST of connected organizations)
-            connections_url = "https://xero.com"
-            conn_headers = {
-                "Authorization": f"Bearer {tokens['access_token']}",
-                "Content-Type": "application/json"
+    if st.button("🚀 Finalize and Load My Dashboard Data", type="primary"):
+        with st.spinner("Exchanging secure token handshakes with Xero API infrastructure..."):
+            token_url = "https://xero.com"
+            payload = {
+                "grant_type": "authorization_code",
+                "code": auth_code,
+                "redirect_uri": REDIRECT_URI,
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET
             }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
             
-            conn_response = requests.get(connections_url, headers=conn_headers)
-            
-            if conn_response.status_code == 200:
-                connections = conn_response.json()
+            try:
+                token_response = requests.post(token_url, data=payload, headers=headers)
                 
-                # Check if connections is a list and extract the first item safely
-                if isinstance(connections, list) and len(connections) > 0:
-                    primary_connection = connections[0]
-                    st.session_state.xero_tenant_id = primary_connection["tenantId"]
-                    st.session_state.xero_tenant_name = primary_connection.get("tenantName", "Xero Demo Company")
+                if token_response.status_code == 200:
+                    tokens = token_response.json()
+                    st.session_state.xero_tokens = tokens
                     
-                    st.success(f"✅ Connected successfully to: **{st.session_state.xero_tenant_name}**")
-                    st.rerun() # Force layout refresh to load accounting tabs instantly
+                    # Fetch active organizational associations
+                    connections_url = "https://xero.com"
+                    conn_headers = {
+                        "Authorization": f"Bearer {tokens['access_token']}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    conn_response = requests.get(connections_url, headers=conn_headers)
+                    
+                    if conn_response.status_code == 200:
+                        connections = conn_response.json()
+                        
+                        if isinstance(connections, list) and len(connections) > 0:
+                            # Safely isolate index dict 0 mapping arrays
+                            primary_connection = connections[0]
+                            st.session_state.xero_tenant_id = primary_connection["tenantId"]
+                            st.session_state.xero_tenant_name = primary_connection.get("tenantName", "Demo Company")
+                            
+                            st.success(f"✅ Success! Connected to: {st.session_state.xero_tenant_name}")
+                            
+                            # Clean the browser URL bar now that tokens are securely saved
+                            st.query_params.clear()
+                            st.rerun()
+                        else:
+                            st.error("❌ Authentication succeeded, but no linked company profiles were found in this account.")
+                    else:
+                        st.error(f"❌ Connection Discovery Failure: {conn_response.text}")
                 else:
-                    st.error("⚠️ Authentication passed, but no linked Xero organizations were found.")
-            else:
-                st.error(f"❌ Failed connection retrieval: {conn_response.text}")
-        else:
-            st.error(f"❌ Failed token handshake: {token_response.text}")
-            
-    except Exception as e:
-        st.error(f"An unexpected connection error occurred: {str(e)}")
-        
-    # Clear callback values cleanly out of the browser URL bar
-    st.query_params.clear()
+                    st.error(f"❌ Token Exchange Failure (HTTP {token_response.status_code}): {token_response.text}")
+                    st.info("💡 Tip: Authorization codes expire in under 5 minutes. Try restarting the handshake process.")
+                    
+            except Exception as e:
+                st.error(f"An unexpected networking exception occurred: {str(e)}")
 
-# --- STATE 3: VIEW & FETCH ACCOUNTING PAYLOADS ---
+# --- STATE 3: DATA RETRIEVAL ACTIVE HUB ---
 if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
-    st.sidebar.markdown(f"### 🏢 Connected Org\n**{st.session_state.xero_tenant_name}**")
-    st.sidebar.caption(f"ID: `{st.session_state.xero_tenant_id[:8]}...`")
+    st.sidebar.markdown(f"### 🏢 Active Connection\n**{st.session_state.xero_tenant_name}**")
+    st.sidebar.caption(f"Tenant Reference: `{st.session_state.xero_tenant_id[:12]}...`")
     
-    # Simple log out switch to reset app state
-    if st.sidebar.button("🔌 Disconnect from Xero"):
+    if st.sidebar.button("Disconnect Session", type="secondary"):
         st.session_state.xero_tokens = None
         st.session_state.xero_tenant_id = None
         st.session_state.xero_tenant_name = None
+        st.query_params.clear()
         st.rerun()
 
-    # User Selection Layout Tabs
-    tab1, tab2 = st.tabs(["📋 Recent Invoices", "👥 Contact Directory"])
+    # Create UI workspace layouts
+    tab1, tab2 = st.tabs(["📋 View Sales Invoices", "👥 Customer Contacts"])
     
-    # Global Request Headers
     api_headers = {
         "Authorization": f"Bearer {st.session_state.xero_tokens['access_token']}",
         "Xero-tenant-id": st.session_state.xero_tenant_id,
@@ -103,37 +107,37 @@ if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
     }
 
     with tab1:
-        if st.button("🔄 Pull Invoices", key="inv_btn"):
-            with st.spinner("Fetching invoice ledger..."):
-                inv_resp = requests.get("https://xero.com", headers=api_headers)
-                if inv_resp.status_code == 200:
-                    invoices = inv_resp.json().get("Invoices", [])
-                    if invoices:
-                        df_inv = pd.json_normalize(invoices)
-                        display_cols = [c for c in ["InvoiceNumber", "Type", "Status", "Total", "AmountDue", "DateString"] if c in df_inv.columns]
-                        st.dataframe(df_inv[display_cols], use_container_width=True)
+        if st.button("📥 Retrieve Invoices Ledger", key="btn_inv_load"):
+            with st.spinner("Extracting transactions..."):
+                resp = requests.get("https://xero.com", headers=api_headers)
+                if resp.status_code == 200:
+                    records = resp.json().get("Invoices", [])
+                    if records:
+                        df = pd.json_normalize(records)
+                        cols = [c for c in ["InvoiceNumber", "Type", "Status", "Total", "AmountDue", "DateString"] if c in df.columns]
+                        st.dataframe(df[cols], use_container_width=True)
                     else:
-                        st.info("No invoice history items found inside this organization profile.")
+                        st.info("No invoice line items found inside this target company profile.")
                 else:
-                    st.error(f"Error {inv_resp.status_code}: {inv_resp.text}")
+                    st.error(f"API Error ({resp.status_code}): {resp.text}")
 
     with tab2:
-        if st.button("🔄 Pull Contacts", key="cont_btn"):
-            with st.spinner("Fetching customer records..."):
-                cont_resp = requests.get("https://xero.com", headers=api_headers)
-                if cont_resp.status_code == 200:
-                    contacts = cont_resp.json().get("Contacts", [])
-                    if contacts:
-                        df_cont = pd.json_normalize(contacts)
-                        display_cols = [c for c in ["Name", "EmailAddress", "ContactStatus"] if c in df_cont.columns]
-                        st.dataframe(df_cont[display_cols], use_container_width=True)
+        if st.button("📥 Retrieve Contacts Profile", key="btn_cont_load"):
+            with st.spinner("Extracting master records..."):
+                resp = requests.get("https://xero.com", headers=api_headers)
+                if resp.status_code == 200:
+                    records = resp.json().get("Contacts", [])
+                    if records:
+                        df = pd.json_normalize(records)
+                        cols = [c for c in ["Name", "EmailAddress", "ContactStatus"] if c in df.columns]
+                        st.dataframe(df[cols], use_container_width=True)
                     else:
-                        st.info("No active contacts saved in this company profile.")
+                        st.info("No active contacts saved inside this business account profile.")
                 else:
-                    st.error(f"Error {cont_resp.status_code}: {cont_resp.text}")
+                    st.error(f"API Error ({resp.status_code}): {resp.text}")
 
-# --- STATE 1: INITIAL UNLINKED INTERFACE ---
-else:
+# --- STATE 1: OFFLINE INITIAL SCREEN ---
+elif not ("code" in query_params):
     st.info("Your application context is currently offline. Connect to Xero securely below.")
     
     params = {
@@ -146,11 +150,8 @@ else:
     encoded_params = urllib.parse.urlencode(params)
     auth_redirect_url = f"https://xero.com?{encoded_params}"
     
-    # NEW WARNING-FREE SAMETAB NAVIGATOR: 
-    # Employs a native st.page_link widget pointing directly to Xero to break frame restrictions cleanly
     st.page_link(
         page=auth_redirect_url,
         label="🔐 Complete Xero Handshake",
-        icon="🔑",
-        use_container_width=False
+        icon="🔑"
     )
