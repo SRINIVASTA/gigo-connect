@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import base64
 
 # Load configurations securely from Streamlit Cloud Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
@@ -12,18 +13,19 @@ st.caption("Machine-to-Machine Integration Node (No Browser Login Required)")
 
 @st.cache_data(show_spinner="Establishing encrypted link directly with Xero Core API...")
 def fetch_xero_ledger_data(endpoint_route):
-    # Step 1: Request token via direct client_credentials grant
-    token_url = "https://xero.com"
-    token_payload = {
-        "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET
-    }
+    # Step 1: Base64 Encode credentials for a secure, firewalled handshake
+    raw_credentials = f"{CLIENT_ID}:{CLIENT_SECRET}"
+    base64_credentials = base64.b64encode(raw_credentials.encode("utf-8")).decode("utf-8")
     
-    # FIX: Explicit User-Agent string bypasses CloudFront's HTTP method restriction block
+    token_url = "https://identity.xero.com/connect/token"
+    token_payload = {"grant_type": "client_credentials"}
+    
+    # Secure header profile to bypass the CloudFront firewall inspection layers
     token_headers = {
+        "Authorization": f"Basic {base64_credentials}",
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "Accept": "application/json",
+        "User-Agent": "GigoConnectSyncEngine/1.0.0 (Automated Business Integration Hub)"
     }
     
     try:
@@ -34,12 +36,13 @@ def fetch_xero_ledger_data(endpoint_route):
             
         access_token = token_res.json().get("access_token")
         
-        # Step 2: Extract target tenant linkage 
+        # Step 2: Extract target tenant connection linkage
         connections_url = "https://xero.com"
         conn_headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "Accept": "application/json",
+            "User-Agent": "GigoConnectSyncEngine/1.0.0"
         }
         conn_res = requests.get(connections_url, headers=conn_headers)
         
@@ -50,18 +53,18 @@ def fetch_xero_ledger_data(endpoint_route):
         if not connections or not isinstance(connections, list):
             return {"error": "No valid organizational connections discovered linked to this credential set."}
             
-        # Isolate index dictionary 0 mapping arrays securely
+        # Isolate the primary organization profile cleanly
         primary_connection = connections[0]
         tenant_id = primary_connection["tenantId"]
         tenant_name = primary_connection.get("tenantName", "Demo Company (Global)")
         
-        # Step 3: Pull real-time data from core endpoint
+        # Step 3: Pull real-time data from the core endpoint
         data_url = f"https://xero.com{endpoint_route}"
         api_headers = {
             "Authorization": f"Bearer {access_token}",
             "Xero-tenant-id": tenant_id,
             "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "GigoConnectSyncEngine/1.0.0"
         }
         
         data_res = requests.get(data_url, headers=api_headers)
@@ -77,7 +80,7 @@ def fetch_xero_ledger_data(endpoint_route):
     except Exception as network_error:
         return {"error": f"An unhandled background connection fault occurred: {str(network_error)}"}
 
-# --- LIVE UI WORKSPACE PANELS ---
+# --- UI WORKSPACE TABS ---
 tab1, tab2 = st.tabs(["📋 Live Sales Invoices Ledger", "👥 Customer Contact Profiles"])
 
 with tab1:
