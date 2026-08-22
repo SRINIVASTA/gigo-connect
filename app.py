@@ -67,11 +67,13 @@ else:
         try:
             parsed_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
             
-            # Smart alignment for raw incoming text fields
+            # FIXED: Correctly grab the exact string item instead of sending a list wrapper
             if "Clean Description" not in parsed_df.columns:
                 text_match = [col for col in parsed_df.columns if any(x in col.lower() for x in ["desc", "ref", "sms", "text", "particular", "msg"])]
                 if text_match:
-                    parsed_df.rename(columns={text_match: "Clean Description"}, inplace=True)
+                    # Extracts the first clean string out of the array matching elements list
+                    actual_column_name = str(text_match[0])
+                    parsed_df.rename(columns={actual_column_name: "Clean Description"}, inplace=True)
                 else:
                     parsed_df["Clean Description"] = "Manual Data Entry Item"
             strl.session_state["uploaded_df"] = parsed_df
@@ -89,6 +91,10 @@ strl.markdown("---")
 if active_matrix_df is not None and not active_matrix_df.empty:
     df_ml = active_matrix_df.copy()
     
+    # Pre-flight check: If something went wrong above, ensure the description tracking column exists
+    if "Clean Description" not in df_ml.columns:
+        df_ml["Clean Description"] = "Manual Entry Data Line"
+
     # Apply ML_CONFIG Garbage Cleaning Filters
     garbage_list = ML_CONFIG.get("GARBAGE_FLAGS", [])
     if garbage_list:
@@ -97,13 +103,15 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     # BROAD EXTRACTOR: Scans deeply for common transaction value numeric headers
     amt_col = [col for col in df_ml.columns if any(x in col.lower() for x in ["amount", "total", "val", "amt", "debit", "credit", "price", "spent"])]
     if amt_col:
-        df_ml['Total Amount'] = pd.to_numeric(df_ml[amt_col].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
+        actual_amt_header = str(amt_col[0])
+        df_ml['Total Amount'] = pd.to_numeric(df_ml[actual_amt_header].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
     else:
-        df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)').str.replace(',', '').astype(float).fillna(0.0)
+        # Regex text scanner extracts digits out of text strings if currency column is completely absent
+        df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)')[0].str.replace(',', '', regex=False).astype(float).fillna(0.0)
 
     # Auto-detect local transaction currency symbols
     curr_col = [col for col in df_ml.columns if "curr" in col.lower() or "symbol" in col.lower()]
-    currency_label = str(df_ml[curr_col].iloc).upper() if curr_col else "USD"
+    currency_label = str(df_ml[curr_col].iloc[0]).upper() if curr_col else "USD"
 
     # 1. RENDER GENERAL LEDGER METRICS SUMMARY
     strl.subheader("📈 General Ledger Metrics Summary")
@@ -135,7 +143,7 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     strl.subheader("📊 Data Analytics Distribution Visualizations")
     v_col1, v_col2 = strl.columns(2)
     
-    # CHANGED: Aggregated both total spending value (sum) and transaction items volume (count)
+    # Aggregated both total spending value (sum) and transaction items volume (count)
     spending_by_label = df_ml.groupby('Accounting Sub-Class Label')['Total Amount'].agg(['sum', 'count']).reset_index()
     spending_by_label.columns = ['Accounting Sub-Class Label', 'Total Spending Value', 'Transaction Count']
     
@@ -155,9 +163,7 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     with v_col2:
         strl.markdown(f"**Total Category Spending Values Table ({currency_label})**")
         display_spending = spending_by_label.copy()
-        # Format currency representation safely
         display_spending['Total Spending Value'] = display_spending['Total Spending Value'].apply(lambda x: f"{currency_label} {x:,.2f}")
-        # Re-arrange layout structure grid columns to emphasize counter columns
         display_spending = display_spending[['Accounting Sub-Class Label', 'Transaction Count', 'Total Spending Value']]
         strl.dataframe(display_spending, use_container_width=True, hide_index=True)
 
