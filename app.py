@@ -144,8 +144,8 @@ else:
     encoded_params = urllib.parse.urlencode(params)
     auth_redirect_url = f"https://xero.com?{encoded_params}"
     
-    # Styled HTML button block to trigger full browser viewport navigation
+    # FIX: target="_blank" forces the browser to open the Xero gateway in a fresh tab
     st.markdown(
-        f'<a href="{auth_redirect_url}" target="_self" style="display: inline-block; padding: 0.6em 1.3em; color: white; background-color: #00b7e2; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔐 Complete Xero Handshake</a>',
+        f'<a href="{auth_redirect_url}" target="_blank" style="display: inline-block; padding: 0.6em 1.3em; color: white; background-color: #00b7e2; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔐 Complete Xero Handshake</a>',
         unsafe_allow_html=True
     )
