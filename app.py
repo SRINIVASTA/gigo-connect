@@ -38,7 +38,7 @@ SCOPES = "openid profile email accounting.transactions accounting.journals offli
 # OAUTH 2.0 FLOW & LIVE REFRESH HANDLERS
 # -------------------------------------------------------------------------
 def get_auth_link():
-    """Generates the authorization gateway entry point link."""
+    """Generates the authorization link, explicitly adding prompt=consent to fix bypassing loops."""
     payload_req = requests.Request(
         'GET', AUTH_URL,
         params={
@@ -46,6 +46,7 @@ def get_auth_link():
             'client_id': CLIENT_ID,
             'redirect_uri': REDIRECT_URI,
             'scope': SCOPES,
+            'prompt': 'consent',  # FORCES Xero to show organization select grid checkboxes
             'state': 'gigo_secure_state_123'
         }
     )
@@ -169,7 +170,7 @@ GIGO_ROWS = [
 ]
 
 # -------------------------------------------------------------------------
-# INTERACTIVE TERMINAL ENGINE UI (FIXED VIA UNBLOCKABLE NEW-TAB ROUTING)
+# INTERACTIVE TERMINAL ENGINE UI
 # -------------------------------------------------------------------------
 strl.sidebar.header("🔑 Xero Live Auth Gateway")
 
@@ -193,8 +194,7 @@ except Exception:
 if not strl.session_state.xero_tokens:
     strl.warning("🔐 **Application Securely Locked**: Connection to Xero API is required to open this dashboard.")
     
-    # CRITICAL FIX: Standard HTML anchor element forced to target a fresh un-sandboxed tab (_blank)
-    # This prevents the secure browser layer from timing out or dropping click signals.
+    # Standard HTML anchor link targeting a fresh blank tab to escape Streamlit iframe walls
     strl.markdown(
         f'<div style="text-align: center; margin-top: 15px; margin-bottom: 15px;">'
         f'<a href="{get_auth_link()}" target="_blank" style="text-decoration: none;">'
