@@ -169,7 +169,7 @@ GIGO_ROWS = [
 ]
 
 # -------------------------------------------------------------------------
-# INTERACTIVE TERMINAL ENGINE UI (CRITICAL TARGET FIX FOR IFRAMES)
+# INTERACTIVE TERMINAL ENGINE UI (FIXED VIA INJECTED NATIVE HTML ESCAPE)
 # -------------------------------------------------------------------------
 strl.sidebar.header("🔑 Xero Live Auth Gateway")
 
@@ -192,13 +192,19 @@ except Exception:
 
 if not strl.session_state.xero_tokens:
     strl.warning("🔐 **Application Securely Locked**: Connection to Xero API is required to open this dashboard.")
-    # FIXED: Added target="_top" style declaration to completely force a clean parent window redirect
-    strl.markdown(
-        f'<a href="{get_auth_link()}" target="_top" style="text-decoration:none;">'
-        f'<div style="background-color:#1363DF;color:white;padding:12px 24px;text-align:center;'
-        f'border-radius:6px;font-weight:bold;font-size:16px;cursor:pointer;">🔗 Secure Connect to Xero API App</div></a>', 
-        unsafe_allow_html=True
-    )
+    
+    # FIX: Using st.html to inject raw JavaScript window.top redirection. 
+    # This completely overrides Streamlit's iframe blocking layout bug.
+    strl.html(f"""
+        <div style="text-align: center; margin-top: 20px;">
+            <button onclick="window.top.location.href='{get_auth_link()}'" 
+                    style="background-color: #1363DF; color: white; padding: 14px 28px; 
+                           text-align: center; border-radius: 6px; font-weight: bold; 
+                           font-size: 16px; border: none; cursor: pointer; width: 100%;">
+                🔗 Secure Connect to Xero API App
+            </button>
+        </div>
+    """)
     strl.stop()
 else:
     if check_and_ensure_auth():
