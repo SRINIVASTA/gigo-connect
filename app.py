@@ -6,7 +6,7 @@ import pandas as pd
 # Load configurations securely from Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
+REDIRECT_URI = "https://streamlit.app"
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
@@ -20,7 +20,6 @@ if "tenant_id" not in st.session_state:
 if "tenant_name" not in st.session_state:
     st.session_state.tenant_name = None
 
-# Function to execute token swap
 def exchange_code_for_tokens(code_string):
     token_url = "https://xero.com"
     payload = {
@@ -37,8 +36,8 @@ def exchange_code_for_tokens(code_string):
         if res.status_code == 200:
             token_json = res.json()
             
-            # Fetch linked tenant configurations
-            conn_url = "https://xero.com"
+            # Fetch connected tenant configurations
+            conn_url = "https://api.xero.com/connections"
             conn_headers = {
                 "Authorization": f"Bearer {token_json['access_token']}",
                 "Content-Type": "application/json"
@@ -60,19 +59,11 @@ def exchange_code_for_tokens(code_string):
                 st.error(f"Tenant extraction failed: {conn_res.text}")
         else:
             st.error(f"Handshake failed (HTTP {res.status_code}): {res.text}")
-            st.info("💡 Tip: Authorization codes are single-use and expire within 5 minutes.")
     except Exception as e:
         st.error(f"A connection error occurred: {str(e)}")
 
-# --- WORKSPACE PATH A: OAUTH REDIRECT FOUND ---
-if "code" in st.query_params and st.session_state.tokens is None:
-    auth_code = st.query_params["code"]
-    st.success("📥 Automatically intercepted OAuth parameters!")
-    if st.button("🚀 Load Dashboard Data", type="primary"):
-        exchange_code_for_tokens(auth_code)
-
-# --- WORKSPACE PATH B: DASHBOARD VIEW ---
-elif st.session_state.tokens and st.session_state.tenant_id:
+# --- WORKSPACE PATH A: DASHBOARD VIEW ---
+if st.session_state.tokens and st.session_state.tenant_id:
     st.sidebar.success(f"🏢 Profile: {st.session_state.tenant_name}")
     if st.sidebar.button("Disconnect Session"):
         st.session_state.tokens = None
@@ -104,7 +95,7 @@ elif st.session_state.tokens and st.session_state.tenant_id:
             else:
                 st.error(f"API Error: {r.text}")
 
-# --- WORKSPACE PATH C: OFFLINE INITIALIZATION & MANUAL FALLBACK ---
+# --- WORKSPACE PATH B: OFFLINE INITIALIZATION & AUTOMATED EXTRACTION ---
 else:
     st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
     
@@ -113,19 +104,31 @@ else:
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "scope": SCOPES,
-        "state": "gigo_agentic_stable_v3"
+        "state": "gigo_agentic_stable_v4"
     }
     auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
     
     st.link_button(label="🔐 1. Complete Xero Handshake", url=auth_redirect_url, use_container_width=True)
     
     st.markdown("---")
-    st.subheader("🛠️ Manual Authorization Fallback")
-    st.caption("If your browser window doesn't automatically load the dashboard after logging into Xero, use this manual override:")
+    st.subheader("🛠️ Instant Link Fallback Connection")
+    st.caption("If your app stays offline after authorizing on Xero, copy the **entire URL address string** from your browser bar and paste it below:")
     
-    manual_code = st.text_input("Paste the 'code' parameter value here:", placeholder="Look at your browser address bar after landing, copy the text after '?code='")
-    if st.button("⚡ 2. Manually Authorize Credentials", use_container_width=True):
-        if manual_code:
-            exchange_code_for_tokens(manual_code)
+    full_url_input = st.text_input("Paste your full browser landing URL here:", placeholder="https://gigo-connect-.../?code=xxx&scope=...")
+    
+    if st.button("⚡ 2. Connect via Landing URL Link", use_container_width=True):
+        if full_url_input:
+            try:
+                # Agentic parser handles isolating the auth token out of the string parameter list automatically
+                parsed_url = urllib.parse.urlparse(full_url_input)
+                url_parameters = urllib.parse.parse_qs(parsed_url.query)
+                
+                if "code" in url_parameters:
+                    target_auth_token = url_parameters["code"][0]
+                    exchange_code_for_tokens(target_auth_token)
+                else:
+                    st.error("Could not find a valid '?code=' parameter in that URL string. Please complete the login step again.")
+            except Exception as parse_err:
+                st.error(f"Could not parse URL text: {str(parse_err)}")
         else:
-            st.error("Please paste a valid authorization code string.")
+            st.error("Please provide a valid URL landing link address string.")
