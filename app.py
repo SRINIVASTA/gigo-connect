@@ -4,9 +4,12 @@ import numpy as np
 import requests
 import base64
 import time
+import io
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
 
 # -------------------------------------------------------------------------
-# SYSTEM CONFIGURATION & CACHE INIT
+# SYSTEM CONFIGURATION & LAYER SETUP
 # -------------------------------------------------------------------------
 strl.set_page_config(page_title="gigo-xero Engine", layout="wide")
 strl.title("🛡️ gigo-xero: Live Unsupervised ML Bookkeeping Engine")
@@ -28,6 +31,20 @@ TOKEN_URL = "https://xero.com"
 TENANT_API_URL = "https://xero.com"
 INVOICES_API_URL = "https://xero.com"
 SCOPES = "openid profile email accounting.transactions accounting.journals offline_access"
+
+# -------------------------------------------------------------------------
+# BINARY BUFFER EXPORT CONVERTERS
+# -------------------------------------------------------------------------
+def convert_df_to_csv(df):
+    """Converts a tracking dataframe structure into a UTF-8 CSV binary stream."""
+    return df.to_csv(index=False).encode('utf-8')
+
+def convert_df_to_xlsx(df):
+    """Compiles a tracking dataframe matrix into an openpyxl Excel binary memory stream."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Clustered Bookkeeping')
+    return output.getvalue()
 
 # -------------------------------------------------------------------------
 # OAUTH HANDSHAKE UTILITIES
@@ -90,7 +107,6 @@ st_selection = strl.radio(
     horizontal=True
 )
 
-# Variable to anchor data for Block 2 handling pipeline
 active_matrix_df = None
 
 if st_selection == "Sync Directly with Xero Live API":
@@ -102,7 +118,7 @@ if st_selection == "Sync Directly with Xero Live API":
             with strl.spinner("🔄 Ingesting live accounting parameters..."):
                 tenants = get_xero_tenants(strl.session_state["xero_tokens"]["access_token"])
                 if tenants and len(tenants) > 0:
-                    tenant_id = tenants[0]["tenantId"]
+                    tenant_id = tenants[0]["tenantId"] if isinstance(tenants, list) else tenants["tenantId"]
                     raw_rows = fetch_live_xero_data(strl.session_state["xero_tokens"]["access_token"], tenant_id)
                     if raw_rows:
                         strl.session_state["xero_df"] = pd.DataFrame(raw_rows)
@@ -118,11 +134,13 @@ else:  # Upload Local Files Selection Branch
             else:
                 parsed_df = pd.read_excel(uploaded_file)
             
-            # Map common manual headers to our standardized engine schema format if needed
+            # Auto-align inconsistent column layout models across datasets
             if "Clean Description" not in parsed_df.columns:
-                if "Description" in parsed_df.columns: parsed_df.rename(columns={"Description": "Clean Description"}, inplace=True)
-                elif "Reference" in parsed_df.columns: parsed_df.rename(columns={"Reference": "Clean Description"}, inplace=True)
-                else: parsed_df["Clean Description"] = "Manual Data Entry Item"
+                text_match_columns = [col for col in parsed_df.columns if "desc" in col.lower() or "ref" in col.lower() or "sms" in col.lower() or "text" in col.lower()]
+                if text_match_columns:
+                    parsed_df.rename(columns={text_match_columns[0]: "Clean Description"}, inplace=True)
+                else:
+                    parsed_df["Clean Description"] = "Manual Data Entry Item"
             
             strl.session_state["uploaded_df"] = parsed_df
         except Exception as e:
@@ -132,13 +150,9 @@ else:  # Upload Local Files Selection Branch
 # -------------------------------------------------------------------------
 # MACHINE LEARNING PIPELINE PROCESSING & EVALUATION BLOCK
 # -------------------------------------------------------------------------
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import KMeans
-
 strl.markdown("---")
 strl.subheader("🤖 Unsupervised Clustering Analytics Engine")
 
-# Check if either ingestion track has successfully populated data vectors
 if active_matrix_df is not None and not active_matrix_df.empty:
     df_ml = active_matrix_df.copy()
     
@@ -162,13 +176,36 @@ if active_matrix_df is not None and not active_matrix_df.empty:
             
             strl.success(f"🤖 Clustering Complete! Groups assembled based on text similarities.")
             
-            # Render Split Categorized Bookkeeping Views
+            # Render Expanders and Inject Targeted Download Actions
             for cluster_id in range(num_clusters):
                 with strl.expander(f"📁 Cluster Category Group #{cluster_id}"):
                     cluster_subset = df_ml[df_ml['Predicted Cluster Bucket'] == cluster_id]
                     strl.dataframe(cluster_subset, use_container_width=True)
                     
+                    # Layout grid structures for inline actions
+                    col1, col2, _ = strl.columns([1, 1, 4])
+                    
+                    with col1:
+                        csv_data = convert_df_to_csv(cluster_subset)
+                        strl.download_button(
+                            label=f"📥 Export Group #{cluster_id} to CSV",
+                            data=csv_data,
+                            file_name=f"gigo_xero_cluster_{cluster_id}.csv",
+                            mime="text/csv",
+                            key=f"dl_csv_{cluster_id}"
+                        )
+                        
+                    with col2:
+                        xlsx_data = convert_df_to_xlsx(cluster_subset)
+                        strl.download_button(
+                            label=f"📊 Export Group #{cluster_id} to Excel",
+                            data=xlsx_data,
+                            file_name=f"gigo_xero_cluster_{cluster_id}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"dl_xlsx_{cluster_id}"
+                        )
+                    
         except Exception as ml_err:
-            strl.error(f"Error parsing textual metadata structure: {ml_err}. Make sure your dataset contains a valid string text column.")
+            strl.error(f"Error parsing textual metadata structure: {ml_err}. Make sure your dataset contains text fields.")
 else:
     strl.info("Awaiting live database synchronization pool or uploaded manual spreadsheet metrics to feed pipeline arrays.")
