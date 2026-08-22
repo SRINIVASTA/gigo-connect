@@ -3,7 +3,7 @@ import requests
 import urllib.parse
 import pandas as pd
 
-# 1. Exact configurations from your setup
+# Load configurations from your Streamlit panel secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
@@ -12,7 +12,7 @@ SCOPES = "openid profile email accounting.transactions accounting.contacts offli
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
 st.title("🔗 Gigo Connect x Xero Integration")
 
-# Initialize state objects
+# Setup safe initialization layers
 if "xero_tokens" not in st.session_state:
     st.session_state.xero_tokens = None
 if "xero_tenant_id" not in st.session_state:
@@ -20,16 +20,18 @@ if "xero_tenant_id" not in st.session_state:
 if "xero_tenant_name" not in st.session_state:
     st.session_state.xero_tenant_name = None
 
+# Extract the temporary parameters string from browser
 query_params = st.query_params
 
-# --- STATE 2: DETECT AND INTERCEPT CALLBACK ---
+# --- STATE 2: ERROR-PROOF HANDSHAKE RESOLVER ---
 if "code" in query_params and st.session_state.xero_tokens is None:
     auth_code = query_params["code"]
-    st.warning("⚠️ Action Required: Xero authorized the app query context!")
     
-    if st.button("🚀 Finalize and Load My Dashboard Data", type="primary"):
-        with st.spinner("Exchanging code for production token metrics..."):
-            # CORRECT ENDPOINT: Must go to identity framework, not the main marketing home page
+    st.success("📥 Temporary authentication code captured from Xero callback context!")
+    st.info("Click the button below to exchange this code for live ledger tokens.")
+    
+    if st.button("🚀 Finalize Handshake & Open Dashboard", type="primary"):
+        with st.spinner("Exchanging token parameters..."):
             token_url = "https://xero.com"
             payload = {
                 "grant_type": "authorization_code",
@@ -44,9 +46,8 @@ if "code" in query_params and st.session_state.xero_tokens is None:
                 res = requests.post(token_url, data=payload, headers=headers)
                 if res.status_code == 200:
                     tokens = res.json()
-                    st.session_state.xero_tokens = tokens
                     
-                    # Discover connected Xero company metrics
+                    # Fetch organization listings profile
                     conn_url = "https://xero.com"
                     conn_headers = {
                         "Authorization": f"Bearer {tokens['access_token']}",
@@ -56,30 +57,43 @@ if "code" in query_params and st.session_state.xero_tokens is None:
                     
                     if conn_res.status_code == 200:
                         connections = conn_res.json()
+                        
+                        # AGENTIC PATCH: Robust list validation check against multi-tenant indexing errors
                         if isinstance(connections, list) and len(connections) > 0:
-                            st.session_state.xero_tenant_id = connections[0]["tenantId"]
-                            st.session_state.xero_tenant_name = connections[0].get("tenantName", "Demo Company")
-                            st.success("🎉 Access Token received! Connection complete.")
-                            st.query_params.clear()
+                            # Isolate dictionary item index 0 safely
+                            primary_org = connections[0]
+                            
+                            # Lock items securely to avoid falling into offline resets
+                            st.session_state.xero_tokens = tokens
+                            st.session_state.xero_tenant_id = primary_org["tenantId"]
+                            st.session_state.xero_tenant_name = primary_org.get("tenantName", "Demo Company (Global)")
+                            
+                            st.toast("Initialization complete!", icon="✅")
                             st.rerun()
                         else:
-                            st.error("No organization matching accounts discovered.")
+                            st.error("❌ Authentication succeeded, but no linked company profiles were found inside this account context.")
+                            st.write("Raw Connection Object:", connections)
                     else:
-                        st.error(f"Tenant mapping lookup failed: {conn_res.text}")
+                        st.error(f"❌ Tenant Connection lookup failed: {conn_res.text}")
                 else:
-                    st.error(f"Handshake failed ({res.status_code}): {res.text}")
-            except Exception as e:
-                st.error(f"Network error processing exchange: {str(e)}")
+                    st.error(f"❌ Xero Token Exchange Failure (HTTP {res.status_code}): {res.text}")
+                    st.info("💡 Note: Authorization codes from Xero expire after single-use execution or within 5 minutes.")
+            except Exception as ex:
+                st.error(f"An unexpected networking error occurred: {str(ex)}")
 
-# --- STATE 3: VIEW ACTIVE DATA HUB ---
+# --- STATE 3: INTERACTIVE ACTIVE DATA HUB ---
 if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
-    st.sidebar.success(f"🏢 Connected to: {st.session_state.xero_tenant_name}")
-    if st.sidebar.button("🔌 Disconnect Session"):
+    st.sidebar.success(f"🏢 Connected: {st.session_state.xero_tenant_name}")
+    st.sidebar.caption(f"ID Reference: `{st.session_state.xero_tenant_id[:12]}...`")
+    
+    if st.sidebar.button("🔌 Close Active Session", use_container_width=True):
         st.session_state.xero_tokens = None
         st.session_state.xero_tenant_id = None
+        st.session_state.xero_tenant_name = None
         st.rerun()
         
-    tab1, tab2 = st.tabs(["📋 Pull Invoices", "👥 Pull Contacts"])
+    tab1, tab2 = st.tabs(["📋 View Sales Invoices", "👥 Customer Contacts"])
+    
     api_headers = {
         "Authorization": f"Bearer {st.session_state.xero_tokens['access_token']}",
         "Xero-tenant-id": st.session_state.xero_tenant_id,
@@ -87,29 +101,51 @@ if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
     }
     
     with tab1:
-        if st.button("📥 Load System Invoices"):
-            r = requests.get("https://xero.com", headers=api_headers)
-            if r.status_code == 200:
-                invs = r.json().get("Invoices", [])
-                st.dataframe(pd.json_normalize(invs) if invs else "No invoices found.")
-                
+        if st.button("📥 Retrieve Invoices Ledger", key="inv_action"):
+            with st.spinner("Extracting transactions payload from Xero..."):
+                r = requests.get("https://xero.com", headers=api_headers)
+                if r.status_code == 200:
+                    records = r.json().get("Invoices", [])
+                    if records:
+                        df = pd.json_normalize(records)
+                        cols = [c for c in ["InvoiceNumber", "Type", "Status", "Total", "AmountDue", "DateString"] if c in df.columns]
+                        st.dataframe(df[cols], use_container_width=True)
+                    else:
+                        st.info("No invoice line records found inside this demo account.")
+                else:
+                    st.error(f"API Connection Error ({r.status_code}): {r.text}")
+                    
     with tab2:
-        if st.button("📥 Load System Contacts"):
-            r = requests.get("https://xero.com", headers=api_headers)
-            if r.status_code == 200:
-                conts = r.json().get("Contacts", [])
-                st.dataframe(pd.json_normalize(conts) if conts else "No contacts found.")
+        if st.button("📥 Retrieve Contacts Profile", key="cont_action"):
+            with st.spinner("Extracting customer lists..."):
+                r = requests.get("https://xero.com", headers=api_headers)
+                if r.status_code == 200:
+                    records = r.json().get("Contacts", [])
+                    if records:
+                        df = pd.json_normalize(records)
+                        cols = [c for c in ["Name", "EmailAddress", "ContactStatus"] if c in df.columns]
+                        st.dataframe(df[cols], use_container_width=True)
+                    else:
+                        st.info("No active customer contact rows found.")
+                else:
+                    st.error(f"API Connection Error ({r.status_code}): {r.text}")
 
 # --- STATE 1: INITIAL OFFLINE SCREEN ---
-elif "code" not in query_params:
-    st.info("System status: Offline. Link your live Xero application setup profiles below.")
-    params = {
-        "response_type": "code",
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "scope": SCOPES,
-        "state": "gigo_secure_state_101"
-    }
-    # CORRECT AUTH LINK: Send user to xero's secure login sub-gateway, not general web URL
-    auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
-    st.link_button(label="🔐 Start Xero Handshake", url=auth_redirect_url, use_container_width=True)
+else:
+    if "code" not in query_params:
+        st.info("System status: Offline. Link your live Xero application setup profiles below.")
+        
+        params = {
+            "response_type": "code",
+            "client_id": CLIENT_ID,
+            "redirect_uri": REDIRECT_URI,
+            "scope": SCOPES,
+            "state": "gigo_agentic_stable_1"
+        }
+        auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
+        
+        st.link_button(
+            label="🔐 Complete Xero Handshake",
+            url=auth_redirect_url,
+            use_container_width=False
+        )
