@@ -6,7 +6,9 @@ import pandas as pd
 # Load configurations securely from Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
+
+# AGENTIC TWEAK: Using a clean, standard redirect URI to force a raw, un-framed token display page
+REDIRECT_URI = "http://localhost:8501/"
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
@@ -115,7 +117,7 @@ else:
     
     manual_code = st.text_input(
         "Paste the temporary authorization code here:", 
-        placeholder="Look at your browser's address bar after signing in..."
+        placeholder="Paste the random letters and numbers from the address bar here..."
     )
     
     if st.button("⚡ 2. Complete Secure Handshake", use_container_width=True):
