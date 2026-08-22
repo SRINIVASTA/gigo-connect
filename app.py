@@ -2,16 +2,17 @@ import streamlit as st
 import requests
 import pandas as pd
 import urllib.parse
-import time
 
-# 1. Secure Environment Mapping from Streamlit Secrets
+# 1. Load Configurations directly from your secure Streamlit Secrets panel
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
+
+# MUST exactly match the Redirect URI saved in your Xero Configuration tab character-for-character
 REDIRECT_URI = "http://localhost:8501/"
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
-st.title("🔗 Gigo Connect x Xero Integration Hub")
+st.title("🔗 Gigo Connect x Xero Integration")
 
 # Establish resilient memory caches inside the running browser session state
 if "tokens" not in st.session_state:
@@ -20,44 +21,6 @@ if "tenant_id" not in st.session_state:
     st.session_state.tenant_id = None
 if "tenant_name" not in st.session_state:
     st.session_state.tenant_name = None
-if "token_expires_at" not in st.session_state:
-    st.session_state.token_expires_at = 0
-
-# --- AUTO-RENEWAL ENGINE ---
-def get_valid_access_token():
-    """Checks the active session clock and silently auto-renews tokens if expired."""
-    if not st.session_state.tokens:
-        return None
-        
-    # If token has less than 60 seconds left or is already expired, trigger renewal
-    if time.time() >= st.session_state.token_expires_at - 60:
-        st.toast("🔄 Access token expired. Auto-refreshing session with Xero Identity Core...", icon="⏳")
-        
-        token_url = "https://xero.com"
-        payload = {
-            "grant_type": "refresh_token",
-            "refresh_token": st.session_state.tokens.get("refresh_token"),
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        
-        try:
-            res = requests.post(token_url, data=payload, headers=headers)
-            if res.status_code == 200:
-                new_tokens = res.json()
-                st.session_state.tokens = new_tokens
-                # Access tokens expire in 30 minutes (1800 seconds)
-                st.session_state.token_expires_at = time.time() + new_tokens.get("expires_in", 1800)
-                st.toast("🎉 Session renewed successfully!", icon="✅")
-            else:
-                st.error(f"🚨 Auto-refresh failed: {res.text}. Please re-authenticate.")
-                st.session_state.tokens = None
-                st.rerun()
-        except Exception as e:
-            st.error(f"Network error during refresh handshake: {str(e)}")
-            
-    return st.session_state.tokens.get("access_token")
 
 def exchange_code_for_tokens(code_string):
     token_url = "https://xero.com"
@@ -74,8 +37,6 @@ def exchange_code_for_tokens(code_string):
         res = requests.post(token_url, data=payload, headers=headers)
         if res.status_code == 200:
             token_json = res.json()
-            st.session_state.tokens = token_json
-            st.session_state.token_expires_at = time.time() + token_json.get("expires_in", 1800)
             
             # Fetch connected organization configurations
             conn_url = "https://xero.com"
@@ -89,6 +50,7 @@ def exchange_code_for_tokens(code_string):
                 connections = conn_res.json()
                 if isinstance(connections, list) and len(connections) > 0:
                     primary_connection = connections[0]
+                    st.session_state.tokens = token_json
                     st.session_state.tenant_id = primary_connection["tenantId"]
                     st.session_state.tenant_name = primary_connection.get("tenantName", "Demo Company")
                     st.success(f"🎉 Connected successfully to: {st.session_state.tenant_name}")
@@ -102,14 +64,9 @@ def exchange_code_for_tokens(code_string):
     except Exception as e:
         st.error(f"A connection error occurred: {str(e)}")
 
-# --- WORKSPACE PATH A: DASHBOARD VIEW ---
+# --- WORKSPACE PATH A: DASHBOARD SECURE DATA VIEW ---
 if st.session_state.tokens and st.session_state.tenant_id:
-    st.sidebar.success(f"🏢 Profile: {st.session_state.tenant_name}")
-    
-    # Calculate and display token remaining lifespan in the sidebar
-    time_left = max(0, int(st.session_state.token_expires_at - time.time()))
-    st.sidebar.caption(f"⏱️ Access Token Lifespan: `{time_left}s` left")
-    
+    st.sidebar.success(f"🏢 Connected Profile: {st.session_state.tenant_name}")
     if st.sidebar.button("Disconnect Session", use_container_width=True):
         st.session_state.tokens = None
         st.session_state.tenant_id = None
@@ -117,33 +74,37 @@ if st.session_state.tokens and st.session_state.tenant_id:
         st.rerun()
         
     tab1, tab2 = st.tabs(["📋 Invoices Ledger", "👥 Contact Profiles"])
+    api_headers = {
+        "Authorization": f"Bearer {st.session_state.tokens['access_token']}",
+        "Xero-tenant-id": st.session_state.tenant_id,
+        "Accept": "application/json"
+    }
     
     with tab1:
         if st.button("📥 Pull Invoices Now", use_container_width=True):
-            # Guard function ensures tokens are valid before launching API calls
-            token = get_valid_access_token()
-            if token:
-                api_headers = {"Authorization": f"Bearer {token}", "Xero-tenant-id": st.session_state.tenant_id, "Accept": "application/json"}
-                r = requests.get("https://xero.com", headers=api_headers)
-                if r.status_code == 200:
-                    data = r.json().get("Invoices", [])
-                    st.dataframe(pd.json_normalize(data) if data else "No invoices.", use_container_width=True)
+            r = requests.get("https://xero.com", headers=api_headers)
+            if r.status_code == 200:
+                data = r.json().get("Invoices", [])
+                if data:
+                    st.dataframe(pd.json_normalize(data), use_container_width=True)
                 else:
-                    st.error(f"API Error: {r.text}")
+                    st.info("No recorded invoices found.")
+            else:
+                st.error(f"API Error: {r.text}")
                 
     with tab2:
         if st.button("📥 Pull Contacts Now", use_container_width=True):
-            token = get_valid_access_token()
-            if token:
-                api_headers = {"Authorization": f"Bearer {token}", "Xero-tenant-id": st.session_state.tenant_id, "Accept": "application/json"}
-                r = requests.get("https://xero.com", headers=api_headers)
-                if r.status_code == 200:
-                    data = r.json().get("Contacts", [])
-                    st.dataframe(pd.json_normalize(data) if data else "No contacts.", use_container_width=True)
+            r = requests.get("https://xero.com", headers=api_headers)
+            if r.status_code == 200:
+                data = r.json().get("Contacts", [])
+                if data:
+                    st.dataframe(pd.json_normalize(data), use_container_width=True)
                 else:
-                    st.error(f"API Error: {r.text}")
+                    st.info("No contacts found.")
+            else:
+                st.error(f"API Error: {r.text}")
 
-# --- WORKSPACE PATH B: OFFLINE INITIALIZATION & MANUAL PASTE PANEL ---
+# --- WORKSPACE PATH B: OFFLINE PANEL VIEW ---
 else:
     st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
     
@@ -152,15 +113,17 @@ else:
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "scope": SCOPES,
-        "state": "gigo_localhost_stable_v12"
+        "state": "gigo_manual_stable_loop"
     }
     auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
     
-    st.link_button(label="🔐 1. Log In and Authorize via Xero Portal", url=auth_redirect_url, use_container_width=True)
+    # Text instruction block providing a raw link fallback to bypass pop-up blocks completely
+    st.markdown("### Step 1: Copy this link and open it in a private browser tab:")
+    st.code(auth_redirect_url, language="text")
     
     st.markdown("---")
     st.subheader("🛠️ Connection Link Dashboard")
-    st.caption("Paste the alphanumeric verification URL below to authorize your connection:")
+    st.caption("Paste the resulting link text string from your address bar right back here:")
     
     manual_input = st.text_input("Paste full address bar URL here:", placeholder="http://localhost:8501/?code=...")
     
@@ -168,6 +131,7 @@ else:
         if manual_input:
             if "code=" in manual_input:
                 try:
+                    # Clear out query link boundaries dynamically
                     parsed_url = urllib.parse.urlparse(manual_input)
                     url_parameters = urllib.parse.parse_qs(parsed_url.query)
                     extracted_token = url_parameters["code"][0]
@@ -177,4 +141,4 @@ else:
             else:
                 exchange_code_for_tokens(manual_input)
         else:
-            st.error("Please provide a valid link address string.")
+            st.error("Please provide a valid code token or landing link address string.")
