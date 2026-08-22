@@ -119,24 +119,23 @@ if st.session_state.tokens and st.session_state.tenant_id:
 
 # --- STATE 1: INITIAL OFFLINE SCREEN ---
 else:
-    if "code" not in query_params:
-        st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
-        
-        params = {
-            "response_type": "code",
-            "client_id": CLIENT_ID,
-            "redirect_uri": REDIRECT_URI,
-            "scope": SCOPES,
-            "state": "gigo_automation_final"
-        }
-        auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
-        
-        # SAME-TAB REDIRECT FIX: Forces the window to navigate directly to Xero within the SAME tab
-        if st.button("🔐 Complete Xero Handshake", type="primary", use_container_width=True):
-            st.markdown(
-                f"""
-                <meta http-equiv="refresh" content="0; url={auth_redirect_url}">
-                <script>window.top.location.href = "{auth_redirect_url}";</script>
-                """,
-                unsafe_allow_html=True
-            )
+    st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
+    
+    params = {
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "scope": SCOPES,
+        "state": "gigo_automation_final"
+    }
+    auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
+    
+    # SAME-TAB REDIRECT FIX: Forces the window to navigate directly to Xero within the SAME tab
+    if st.button("🔐 Complete Xero Handshake", type="primary", use_container_width=True):
+        st.markdown(
+            f"""
+            <meta http-equiv="refresh" content="0; url={auth_redirect_url}">
+            <script>window.top.location.href = "{auth_redirect_url}";</script>
+            """,
+            unsafe_allow_html=True
+        )
