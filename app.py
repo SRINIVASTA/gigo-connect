@@ -6,7 +6,7 @@ import urllib.parse
 # 1. Load Configurations from Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-REDIRECT_URI = "https://streamlit.app"
+REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
 
 # Complete scope credentials required to read your Demo Ledger
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
