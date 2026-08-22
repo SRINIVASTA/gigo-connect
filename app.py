@@ -3,10 +3,10 @@ import requests
 import pandas as pd
 import urllib.parse
 
-# 1. Load Configurations from Secrets (Matching your setup perfectly)
+# 1. Load Configurations from Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
+REDIRECT_URI = "https://streamlit.app"
 
 # Scopes needed to fetch organization names, invoices, and contacts
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
@@ -27,7 +27,7 @@ query_params = st.query_params
 
 if "code" in query_params and st.session_state.xero_tokens is None:
     auth_code = query_params["code"]
-    st.info("🔄 Processing authorization callback code from Xero...")
+    st.info("🔄 Found Auth Code! Exchanging token pairs with Xero...")
     
     # Post request payload to exchange code for structural access tokens
     token_url = "https://xero.com"
@@ -45,9 +45,9 @@ if "code" in query_params and st.session_state.xero_tokens is None:
         
         if token_response.status_code == 200:
             tokens = token_response.json()
-            st.session_state.xero_tokens = tokens  # Dict containing access_token and refresh_token
+            st.session_state.xero_tokens = tokens  # Contains access_token and refresh_token
             
-            # Xero Identity Connection discovery (returns a list of accessible organizations)
+            # Xero Identity Connection discovery (returns a LIST/ARRAY of connected organizations)
             connections_url = "https://xero.com"
             conn_headers = {
                 "Authorization": f"Bearer {tokens['access_token']}",
@@ -58,11 +58,15 @@ if "code" in query_params and st.session_state.xero_tokens is None:
             
             if conn_response.status_code == 200:
                 connections = conn_response.json()
+                
+                # FIX: Check if connections is a list and extract the first item safely
                 if isinstance(connections, list) and len(connections) > 0:
-                    # Select the first connected organization tenant
-                    st.session_state.xero_tenant_id = connections[0]["tenantId"]
-                    st.session_state.xero_tenant_name = connections[0].get("tenantName", "Xero Organization")
-                    st.success(f"✅ Successfully linked to: **{st.session_state.xero_tenant_name}**")
+                    primary_connection = connections[0] # Grab the first active connection profile
+                    st.session_state.xero_tenant_id = primary_connection["tenantId"]
+                    st.session_state.xero_tenant_name = primary_connection.get("tenantName", "Xero Demo Company")
+                    
+                    st.success(f"✅ Connected successfully to: **{st.session_state.xero_tenant_name}**")
+                    st.rerun() # Force layout refresh to load accounting tabs instantly
                 else:
                     st.error("⚠️ Authentication passed, but no linked Xero organizations were found.")
             else:
@@ -105,9 +109,7 @@ if st.session_state.xero_tokens and st.session_state.xero_tenant_id:
                 if inv_resp.status_code == 200:
                     invoices = inv_resp.json().get("Invoices", [])
                     if invoices:
-                        # Normalize nested API JSON data structurally into a data frame
                         df_inv = pd.json_normalize(invoices)
-                        # Filter columns dynamically for quick visual scanning
                         display_cols = [c for c in ["InvoiceNumber", "Type", "Status", "Total", "AmountDue", "DateString"] if c in df_inv.columns]
                         st.dataframe(df_inv[display_cols], use_container_width=True)
                     else:
@@ -144,35 +146,13 @@ else:
     encoded_params = urllib.parse.urlencode(params)
     auth_redirect_url = f"https://xero.com?{encoded_params}"
     
-    # Create two columns to handle the user flow smoothly
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        # The primary login action button
-        st.markdown(
-            f'<a href="{auth_redirect_url}" target="_blank" style="display: inline-block; padding: 0.6em 1.3em; color: white; background-color: #00b7e2; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔐 Launch Xero Login</a>',
-            unsafe_allow_html=True
+    # FIXED SAME-TAB BUTTON REDIRECT: Uses targeted window parent relocation to bypass iframe issues cleanly
+    if st.button("🔐 Complete Xero Handshake"):
+        st.components.v1.html(
+            f"""
+            <script>
+                window.parent.location.href = "{auth_redirect_url}";
+            </script>
+            """,
+            height=0
         )
-        
-    with col2:
-        # A manual sync button for Window 1 to pick up changes if it feels stuck
-        if st.button("🔄 Sync & Refresh App Data"):
-            st.rerun()
-
-    # Clear instructions to prevent user confusion across tabs
-    st.markdown("""
-    ---
-    💡 **What to expect next:**
-    1. Clicking the launch button opens Xero's secure login portal in a **new tab**.
-    2. Log in and select your **Demo Company (Global)**.
-    3. Once authorized, that new tab will load your active data hub. You can safely close this original idle window!
-    """)
-# This forces the browser window to navigate directly away from Streamlit to Xero
-st.components.v1.html(
-    f"""
-    <script>
-        window.top.location.href = "{auth_redirect_url}";
-    </script>
-    """,
-    height=0
-)
