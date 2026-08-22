@@ -110,12 +110,11 @@ else:
         try:
             parsed_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
             
-            # FIXED: Grabbing structural indices directly out of matched arrays 
+            # FIXED: Added explicit string indexing [0] to extract the pure text variable out of the layout matcher
             if "Clean Description" not in parsed_df.columns:
                 text_match = [col for col in parsed_df.columns if any(x in col.lower() for x in ["desc", "ref", "sms", "text", "particular", "msg"])]
                 if text_match:
-                    # Pull string directly using list positional indexing
-                    actual_column_name = text_match[0]
+                    actual_column_name = str(text_match[0])
                     parsed_df.rename(columns={actual_column_name: "Clean Description"}, inplace=True)
                 else:
                     parsed_df["Clean Description"] = "Manual Data Entry Item"
@@ -134,9 +133,10 @@ strl.markdown("---")
 if active_matrix_df is not None and not active_matrix_df.empty:
     df_ml = active_matrix_df.copy()
     
-    # Structural Fallback Layer
+    # Structural Fallback Layer ensures column absolutely exists to prevent line 153 crashes
     if "Clean Description" not in df_ml.columns:
-        df_ml["Clean Description"] = "Manual Entry Data Line"
+        # Fallback maps to first available column if rename structure mismatched
+        df_ml["Clean Description"] = df_ml.iloc[:, 0].astype(str)
 
     # Filter out junk elements
     garbage_list = ML_CONFIG.get("GARBAGE_FLAGS", [])
@@ -146,7 +146,7 @@ if active_matrix_df is not None and not active_matrix_df.empty:
     # BROAD VALUE PARSER: Scans your sheets for amounts or currency text
     amt_col = [col for col in df_ml.columns if any(x in col.lower() for x in ["amount", "total", "val", "amt", "debit", "credit", "price", "spent"])]
     if amt_col:
-        actual_amt_header = amt_col[0]
+        actual_amt_header = str(amt_col[0])
         df_ml['Total Amount'] = pd.to_numeric(df_ml[actual_amt_header].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
     else:
         # Regex text fallback scanner pulls digits directly out of text blocks
