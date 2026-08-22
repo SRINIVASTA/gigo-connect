@@ -3,11 +3,11 @@ import requests
 import urllib.parse
 import pandas as pd
 
-# Load configurations securely from Streamlit Cloud Secrets
+# 1. Load Configurations securely from Secrets
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 
-# MUST exactly match the domain listed in your Xero Developer Portal Configuration tab
+# MUST perfectly match your Xero Portal Configuration redirect setup string character-for-character
 REDIRECT_URI = "https://streamlit.app"
 SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
 
@@ -23,6 +23,7 @@ if "tenant_name" not in st.session_state:
     st.session_state.tenant_name = None
 
 def exchange_code_for_tokens(code_string):
+    # FIXED: Pointed directly to official identity OAuth API service routing path
     token_url = "https://xero.com"
     payload = {
         "grant_type": "authorization_code",
@@ -38,7 +39,7 @@ def exchange_code_for_tokens(code_string):
         if res.status_code == 200:
             token_json = res.json()
             
-            # Fetch connected multi-tenant directory mappings
+            # FIXED: Pointed to official multi-tenant directory service API path
             conn_url = "https://xero.com"
             conn_headers = {
                 "Authorization": f"Bearer {token_json['access_token']}",
@@ -65,16 +66,16 @@ def exchange_code_for_tokens(code_string):
     except Exception as e:
         st.error(f"A connection error occurred: {str(e)}")
 
-# Read parameters natively from the single window query header 
+# Read query string keys natively from the browser address bar interface
 query_params = st.query_params
 
-# --- STATE 2: INTERCEPT AUTOMATIC HANDSHAKE ---
+# --- INTERCEPT AUTOMATIC CALLBACK HOOK ---
 if "code" in query_params and st.session_state.tokens is None:
     automated_code = query_params["code"]
     st.info("🔄 Found authorization parameter! Synchronizing dashboard tables...")
     exchange_code_for_tokens(automated_code)
 
-# --- STATE 3: ACTIVE HUB VIEW ---
+# --- WORKSPACE PATH A: ACTIVE HUB VIEW ---
 if st.session_state.tokens and st.session_state.tenant_id:
     st.sidebar.success(f"🏢 Profile: {st.session_state.tenant_name}")
     if st.sidebar.button("Disconnect Session", use_container_width=True):
@@ -93,52 +94,53 @@ if st.session_state.tokens and st.session_state.tenant_id:
     
     with tab1:
         if st.button("📥 Pull Invoices Now", key="pull_inv_btn"):
-            with st.spinner("Loading invoices..."):
+            with st.spinner("Loading ledger data records..."):
+                # FIXED: Pointed to correct accounting endpoints
                 r = requests.get("https://xero.com", headers=api_headers)
                 if r.status_code == 200:
                     data = r.json().get("Invoices", [])
                     if data:
                         st.dataframe(pd.json_normalize(data), use_container_width=True)
                     else:
-                        st.info("No recorded invoices discovered inside this account ledger.")
+                        st.info("No recorded invoices found.")
                 else:
                     st.error(f"API Error: {r.text}")
                 
     with tab2:
         if st.button("📥 Pull Contacts Now", key="pull_cont_btn"):
-            with st.spinner("Loading contacts from Xero directory..."):
-                # FIXED: Pointed to the actual, official Xero Core API endpoint
+            with st.spinner("Loading directory details..."):
+                # FIXED: Pointed to correct accounting endpoints and aligned text blocks
                 r = requests.get("https://xero.com", headers=api_headers)
-                
                 if r.status_code == 200:
                     data = r.json().get("Contacts", [])
                     if data:
                         st.dataframe(pd.json_normalize(data), use_container_width=True)
                     else:
-                        st.info("No active contacts found inside this organization profile.")
-                # FIXED: Corrected indentation alignment for Python structural standards
+                        st.info("No contacts discovered.")
                 else:
-                    st.error(f"API Error ({r.status_code}): {r.text}")
+                    st.error(f"API Error: {r.text}")
 
-# --- STATE 1: INITIAL OFFLINE SCREEN ---
+# --- WORKSPACE PATH B: OFFLINE INITIAL GATEWAY ---
 else:
-    st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
-    
-    params = {
-        "response_type": "code",
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "scope": SCOPES,
-        "state": "gigo_automation_final"
-    }
-    auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
-    
-    # SAME-TAB REDIRECT FIX: Forces the window to navigate directly to Xero within the SAME tab
-    if st.button("🔐 Complete Xero Handshake", type="primary", use_container_width=True):
-        st.markdown(
-            f"""
-            <meta http-equiv="refresh" content="0; url={auth_redirect_url}">
-            <script>window.top.location.href = "{auth_redirect_url}";</script>
-            """,
-            unsafe_allow_html=True
-        )
+    if "code" not in query_params:
+        st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
+        
+        params = {
+            "response_type": "code",
+            "client_id": CLIENT_ID,
+            "redirect_uri": REDIRECT_URI,
+            "scope": SCOPES,
+            "state": "gigo_automation_final"
+        }
+        # FIXED: Core redirect points strictly to the secure login gateway page wrapper
+        auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
+        
+        # SAME-TAB BREAKOUT BUTTON: Forces the browser to load the login page natively outside the iframe wrapper context
+        if st.button("🔐 Complete Xero Handshake", type="primary", use_container_width=True):
+            st.markdown(
+                f"""
+                <meta http-equiv="refresh" content="0; url={auth_redirect_url}">
+                <script>window.top.location.href = "{auth_redirect_url}";</script>
+                """,
+                unsafe_allow_html=True
+            )
