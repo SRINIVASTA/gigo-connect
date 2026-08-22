@@ -47,7 +47,7 @@ if "code" in query_params and st.session_state.xero_tokens is None:
             tokens = token_response.json()
             st.session_state.xero_tokens = tokens  # Contains access_token and refresh_token
             
-            # Xero Identity Connection discovery (returns a LIST/ARRAY of connected organizations)
+            # Xero Identity Connection discovery (returns a LIST of connected organizations)
             connections_url = "https://xero.com"
             conn_headers = {
                 "Authorization": f"Bearer {tokens['access_token']}",
@@ -59,9 +59,9 @@ if "code" in query_params and st.session_state.xero_tokens is None:
             if conn_response.status_code == 200:
                 connections = conn_response.json()
                 
-                # FIX: Check if connections is a list and extract the first item safely
+                # Check if connections is a list and extract the first item safely
                 if isinstance(connections, list) and len(connections) > 0:
-                    primary_connection = connections[0] # Grab the first active connection profile
+                    primary_connection = connections[0]
                     st.session_state.xero_tenant_id = primary_connection["tenantId"]
                     st.session_state.xero_tenant_name = primary_connection.get("tenantName", "Xero Demo Company")
                     
@@ -146,13 +146,11 @@ else:
     encoded_params = urllib.parse.urlencode(params)
     auth_redirect_url = f"https://xero.com?{encoded_params}"
     
-    # FIXED SAME-TAB BUTTON REDIRECT: Uses targeted window parent relocation to bypass iframe issues cleanly
-    if st.button("🔐 Complete Xero Handshake"):
-        st.components.v1.html(
-            f"""
-            <script>
-                window.parent.location.href = "{auth_redirect_url}";
-            </script>
-            """,
-            height=0
-        )
+    # NEW WARNING-FREE SAMETAB NAVIGATOR: 
+    # Employs a native st.page_link widget pointing directly to Xero to break frame restrictions cleanly
+    st.page_link(
+        page=auth_redirect_url,
+        label="🔐 Complete Xero Handshake",
+        icon="🔑",
+        use_container_width=False
+    )
