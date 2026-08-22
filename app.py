@@ -82,11 +82,9 @@ if st_selection == "Sync Directly with Xero Live API":
                 res = requests.get(TENANT_API_URL, headers=headers)
                 if res.status_code == 200:
                     tenants = res.json()
-                    # FIXED: Added explicit list element index parsing to resolve type evaluation crashes
                     if tenants and isinstance(tenants, list) and len(tenants) > 0:
                         tenant_id = tenants[0]["tenantId"]
                         
-                        # Fetch invoices safely
                         inv_headers = {"Authorization": f"Bearer {strl.session_state['xero_tokens']['access_token']}", "Xero-tenant-id": tenant_id, "Accept": "application/json"}
                         inv_res = requests.get(INVOICES_API_URL, headers=inv_headers)
                         if inv_res.status_code == 200:
@@ -111,10 +109,14 @@ else:
     if uploaded_file is not None:
         try:
             parsed_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+            
+            # FIXED: Grabbing structural indices directly out of matched arrays 
             if "Clean Description" not in parsed_df.columns:
                 text_match = [col for col in parsed_df.columns if any(x in col.lower() for x in ["desc", "ref", "sms", "text", "particular", "msg"])]
                 if text_match:
-                    parsed_df.rename(columns={text_match[0]: "Clean Description"}, inplace=True)
+                    # Pull string directly using list positional indexing
+                    actual_column_name = text_match[0]
+                    parsed_df.rename(columns={actual_column_name: "Clean Description"}, inplace=True)
                 else:
                     parsed_df["Clean Description"] = "Manual Data Entry Item"
             strl.session_state["uploaded_df"] = parsed_df
@@ -132,23 +134,26 @@ strl.markdown("---")
 if active_matrix_df is not None and not active_matrix_df.empty:
     df_ml = active_matrix_df.copy()
     
+    # Structural Fallback Layer
     if "Clean Description" not in df_ml.columns:
         df_ml["Clean Description"] = "Manual Entry Data Line"
 
-    # Clean out unwanted entries if configured in secrets
+    # Filter out junk elements
     garbage_list = ML_CONFIG.get("GARBAGE_FLAGS", [])
     if garbage_list:
         df_ml = df_ml[~df_ml['Clean Description'].astype(str).str.contains('|'.join(garbage_list), case=False, na=False)]
 
-    # Dynamic value extraction mapping
+    # BROAD VALUE PARSER: Scans your sheets for amounts or currency text
     amt_col = [col for col in df_ml.columns if any(x in col.lower() for x in ["amount", "total", "val", "amt", "debit", "credit", "price", "spent"])]
     if amt_col:
-        df_ml['Total Amount'] = pd.to_numeric(df_ml[amt_col[0]].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
+        actual_amt_header = amt_col[0]
+        df_ml['Total Amount'] = pd.to_numeric(df_ml[actual_amt_header].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce').fillna(0.0)
     else:
+        # Regex text fallback scanner pulls digits directly out of text blocks
         df_ml['Total Amount'] = df_ml['Clean Description'].astype(str).str.extract(r'(?:INR|USD|AED|Rs\.?)\s*([\d,]+\.?\d*)').str.replace(',', '', regex=False).astype(float).fillna(0.0)
 
     curr_col = [col for col in df_ml.columns if "curr" in col.lower() or "symbol" in col.lower()]
-    currency_label = str(df_ml[curr_col[0]].iloc[0]).upper() if curr_col else "USD"
+    currency_label = str(df_ml[curr_col].iloc[0]).upper() if curr_col else "USD"
 
     # 1. RENDER GENERAL LEDGER METRICS SUMMARY
     strl.subheader("📈 General Ledger Metrics Summary")
