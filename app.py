@@ -1,133 +1,127 @@
 import os
 import requests
 import jwt
-import secrets
-import hashlib
 import base64
-import streamlit as st
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse, HTMLResponse
 from urllib.parse import urlencode
+from dotenv import load_dotenv
 
-st.set_page_config(page_title="Gigo Custom Sync Portal", layout="centered")
-st.title("Gigo Custom Sync Portal")
+load_dotenv()
 
-# ------------------------------------------------------------------------
-# SECRETS RETRIEVAL LAYER (Strictly NO Client Secret Required for PKCE Flow)
-# ------------------------------------------------------------------------
-try:
-    XERO_CLIENT_ID = str(st.secrets["XERO_CLIENT_ID"]).replace(" ", "").strip().lower()
-    XERO_REDIRECT_URI = str(st.secrets["XERO_REDIRECT_URI"]).replace(" ", "").strip()
-except KeyError as e:
-    st.error(f"🚨 CONFIGURATION ERROR: Missing key in Streamlit Secrets: {e}")
-    st.info("Ensure your Secrets text area matches exactly: XERO_CLIENT_ID and XERO_REDIRECT_URI")
-    st.stop()
-
-# Initialize unique dynamic PKCE security state tokens in memory
-if "code_verifier" not in st.session_state:
-    st.session_state.code_verifier = secrets.token_urlsafe(64)
+app = FastAPI(title="Gigo Custom Sync Engine")
 
 # ------------------------------------------------------------------------
-# STATE 1: Active User Session Is Open (Successful Login Overview)
+# ENVIRONMENT VARIABLES SETUP
 # ------------------------------------------------------------------------
-if "authenticated_user" in st.session_state:
-    current_user = st.session_state.authenticated_user
-    st.success(f"🎉 Login Successful! Welcome, {current_user['name']}!")
-    st.write("---")
-    st.subheader("👤 Your Authenticated User Payload Data")
-    st.json(current_user)
+XERO_CLIENT_ID = os.getenv("XERO_CLIENT_ID", "").strip()
+XERO_CLIENT_SECRET = os.getenv("XERO_CLIENT_SECRET", "").strip()
+XERO_REDIRECT_URI = os.getenv("XERO_REDIRECT_URI", "").strip()
+
+# Local memory store to display the user data after login
+db_user_store = {}
+
+# ------------------------------------------------------------------------
+# 1. ROUTE: Root Landing Page (Renders a standard clean HTML button)
+# ------------------------------------------------------------------------
+@app.get("/", response_class=HTMLResponse)
+def landing_page():
+    if db_user_store:
+        profile_html = "".join([f"<li><b>{k}:</b> {v}</li>" for k, v in db_user_store.items()])
+        return f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; margin: 40px; text-align: center;">
+                <h1 style="color: #00b7e2;">🎉 Login Successful!</h1>
+                <div style="background: #f4f4f4; padding: 20px; border-radius: 8px; display: inline-block; text-align: left;">
+                    <h3>👤 Authenticated User Payload Data</h3>
+                    <ul>{profile_html}</ul>
+                </div>
+                <br/><br/>
+                <a href="/clear" style="color: red; text-decoration: none; font-weight: bold;">Log Out and Reset</a>
+            </body>
+        </html>
+        """
+
+    # Build standard clean OAuth configurations
+    oauth_params = {
+        "response_type": "code",
+        "client_id": XERO_CLIENT_ID,
+        "redirect_uri": XERO_REDIRECT_URI,
+        "scope": "openid profile email accounting.transactions.read",
+        "state": "gigo_fastapi_sync"
+    }
     
-    if st.button("Log Out and Reset App Context"):
-        del st.session_state.authenticated_user
-        if "xero_tokens" in st.session_state:
-            del st.session_state.xero_tokens
-        st.session_state.code_verifier = secrets.token_urlsafe(64)
-        st.rerun()
-    st.stop()
+    base_gateway_url = "https://xero.com"
+    xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
+
+    return f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; margin: 50px; text-align: center;">
+            <h2>Gigo Custom Sync Portal (FastAPI Engine)</h2>
+            <p>Please click the button below to authorize using Xero Secure Identity.</p>
+            <br/>
+            <a href="{xero_gate_url}" target="_self">
+                <button style="padding: 12px 24px; background-color: #00b7e2; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
+                    🔑 Sign Up / Sign In with Xero
+                </button>
+            </a>
+        </body>
+    </html>
+    """
 
 # ------------------------------------------------------------------------
-# STATE 2: Incoming Redirection Data Handler from Xero Callback Loop
+# 2. ROUTE: Callback Endpoint (Captures the data returning from Xero)
 # ------------------------------------------------------------------------
-query_params = st.query_params
+@app.get("/callback")
+def auth_callback(code: str = None, error: str = None):
+    if error:
+        return HTMLResponse(content=f"<h3 style='color:red;'>Xero Authorization Denied: {error}</h3>", status_code=400)
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code.")
 
-if "code" in query_params:
-    auth_code = query_params["code"]
-    st.query_params.clear()  # Instantly wipe URL parameters to prevent duplicate tab loops
-
-    with st.spinner("Exchanging token handshake via secure PKCE rules..."):
-        token_endpoint = "https://xero.com"
+    token_endpoint = "https://xero.com"
+    
+    payload = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': XERO_REDIRECT_URI
+    }
+    
+    # Enforce standard Base64 Basic Auth headers for Web Apps
+    raw_auth_string = f"{XERO_CLIENT_ID}:{XERO_CLIENT_SECRET}"
+    encoded_auth_bytes = base64.b64encode(raw_auth_string.encode("utf-8"))
+    encoded_auth_string = encoded_auth_bytes.decode("utf-8")
+    
+    headers = {
+        "Authorization": f"Basic {encoded_auth_string}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    
+    response = requests.post(token_endpoint, data=payload, headers=headers)
+    
+    if response.status_code == 200:
+        token_data = response.json()
+        identity_claims = jwt.decode(token_data.get("id_token"), options={"verify_signature": False})
         
-        payload = {
-            'grant_type': 'authorization_code',
-            'client_id': XERO_CLIENT_ID,
-            'code': auth_code,
-            'redirect_uri': XERO_REDIRECT_URI,
-            'code_verifier': st.session_state.code_verifier
+        global db_user_store
+        db_user_store = {
+            "xero_id": identity_claims.get("sub"),
+            "email": identity_claims.get("email"),
+            "name": f"{identity_claims.get('given_name', '')} {identity_claims.get('family_name', '')}".strip() or "User"
         }
         
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        
-        response = requests.post(token_endpoint, data=payload, headers=headers)
-        
-        # Fallback handling: Try uppercase variant if lowercase fails due to registry definitions
-        if response.status_code != 200:
-            payload['client_id'] = XERO_CLIENT_ID.upper()
-            response = requests.post(token_endpoint, data=payload, headers=headers)
-            
-        if response.status_code == 200:
-            token_data = response.json()
-            identity_claims = jwt.decode(token_data.get("id_token"), options={"verify_signature": False})
-            
-            xero_uid = identity_claims.get("sub")
-            user_email = identity_claims.get("email")
-            first_name = identity_claims.get('given_name', '')
-            last_name = identity_claims.get('family_name', '')
-            full_name = f"{first_name} {last_name}".strip() or "User"
-            
-            st.session_state.authenticated_user = {
-                "xero_id": xero_uid, 
-                "email": user_email, 
-                "name": full_name
-            }
-            st.session_state.xero_tokens = {
-                "access_token": token_data.get("access_token"), 
-                "refresh_token": token_data.get("refresh_token")
-            }
-            st.rerun()
-        else:
-            st.error("❌ PKCE Handshake Verification Failed!")
-            st.warning(f"HTTP Status Code Received: {response.status_code}")
-            st.code(response.text, language="json")
-            if st.button("Reset Portal state"):
-                st.rerun()
-    st.stop()
+        return RedirectResponse(url="/")
+    else:
+        return HTMLResponse(content=f"<h3>❌ Xero API Handshake Rejected!</h3><pre>{response.text}</pre>", status_code=400)
 
-# ------------------------------------------------------------------------
-# STATE 3: Base Landing Page Display Screen (Initial Unauthenticated State)
-# ------------------------------------------------------------------------
-st.write("Please click the button below to authorize using Xero Secure Identity.")
+@app.get("/clear")
+def clear_session():
+    global db_user_store
+    db_user_store.clear()
+    return RedirectResponse(url="/")
 
-# Generate PKCE cryptographically hashed token challenge
-hashed_verifier = hashlib.sha256(st.session_state.code_verifier.encode('utf-8')).digest()
-base64_encoded = base64.urlsafe_b64encode(hashed_verifier).decode('utf-8')
-code_challenge = base64_encoded.replace('=', '')
-
-oauth_params = {
-    "response_type": "code",
-    "client_id": XERO_CLIENT_ID,
-    "redirect_uri": XERO_REDIRECT_URI,
-    "scope": "openid profile email accounting.transactions.read accounting.settings.read",
-    "state": "gigo_pkce_sync_session",
-    "code_challenge": code_challenge,
-    "code_challenge_method": "S256"
-}
-
-base_gateway_url = "https://xero.com"
-xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
-
-st.link_button(label="🔑 Sign Up / Sign In with Xero", url=xero_gate_url, type="primary")
-
-st.write("---")
-st.subheader("🔧 Live Redirect Debugger Data")
-st.write(f"**Cleaned Client ID sent to Xero:** `{XERO_CLIENT_ID}`")
-st.write(f"**Target Redirect URI:** `{XERO_REDIRECT_URI}`")
+if __name__ == "__main__":
+    import uvicorn
+    # Starts the FastAPI app locally on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
