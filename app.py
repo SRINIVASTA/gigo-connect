@@ -7,10 +7,10 @@ import urllib.parse
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 
-# FIXED: Set to your exact character-for-character production Streamlit Cloud URL
-REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
+# MUST exactly match the Redirect URI saved in your Xero Configuration tab character-for-character
+REDIRECT_URI = "https://streamlit.app"
 
-# FIXED: Updated to modern 2026 granular scopes required by Xero's security engine
+# 2026 Mandatory Granular Scopes for Xero API Ecosystem
 SCOPES = "openid profile email app.connections accounting.contacts accounting.invoices offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
@@ -58,7 +58,6 @@ def exchange_code_for_tokens(code_string):
             if conn_res.status_code == 200:
                 connections = conn_res.json()
                 if isinstance(connections, list) and len(connections) > 0:
-                    # Parse the primary connected organization dictionary object
                     primary_connection = connections[0]
                     st.session_state.tokens = token_json
                     st.session_state.tenant_id = primary_connection["tenantId"]
@@ -125,9 +124,10 @@ else:
         "scope": SCOPES,
         "state": "gigo_manual_stable_loop"
     }
+    
+    # FIXED ENDPOINT STRINGS
     auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
     
-    # Text instruction block providing a raw link fallback to bypass pop-up blocks completely
     st.markdown("### Step 1: Copy this link and open it in a private browser tab:")
     st.code(auth_redirect_url, language="text")
     
@@ -141,7 +141,6 @@ else:
         if manual_input:
             if "code=" in manual_input:
                 try:
-                    # Clear out query link boundaries dynamically
                     parsed_url = urllib.parse.urlparse(manual_input)
                     url_parameters = urllib.parse.parse_qs(parsed_url.query)
                     extracted_token = url_parameters["code"][0]
