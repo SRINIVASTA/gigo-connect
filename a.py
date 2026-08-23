@@ -27,7 +27,7 @@ SUB_CLASSIFICATION = strl.secrets.get("SUB_CLASSIFICATION", {})
 # Fallback credentials pointers
 CLIENT_ID = strl.secrets.get("XERO_CLIENT_ID", "YOUR_XERO_CLIENT_ID_HERE")
 CLIENT_SECRET = strl.secrets.get("XERO_CLIENT_SECRET", "YOUR_XERO_CLIENT_SECRET_HERE")
-REDIRECT_URI = strl.secrets.get("XERO_REDIRECT_URI", "https://streamlit.app")
+REDIRECT_URI = strl.secrets.get("XERO_REDIRECT_URI", "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/")
 
 AUTH_URL = "https://xero.com"
 TOKEN_URL = "https://xero.com"
