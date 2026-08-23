@@ -3,18 +3,31 @@ import secrets
 import requests
 import jwt
 import streamlit as st
+from urllib.parse import urlencode
 
-# ------------------------------------------------------------------------
-# SECRETS RETRIEVAL LAYER (Querying Streamlit Native Advanced Settings)
-# ------------------------------------------------------------------------
-try:
-    XERO_CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
-    XERO_CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-    XERO_REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
-except KeyError as e:
-    st.error(f"Missing configuration setup key inside Streamlit Advanced Secrets: {e}")
-    st.info("Ensure your Secrets text area matches the exact naming constraints: XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI")
-    st.stop()
+# 3. BASE SCREEN STATE: Render initial authorization request portal layout
+st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
+
+# Use standard urllib dict encoding to build an exploit-proof query structure
+oauth_params = {
+    "response_type": "code",
+    "client_id": XERO_CLIENT_ID.strip(),
+    "redirect_uri": XERO_REDIRECT_URI.strip(),
+    "scope": "openid profile email accounting.transactions",
+    "state": secrets.token_hex(16)
+}
+
+# Explicitly attaches to the immutable base identity gateway URL path
+base_gateway_url = "https://login.xero.com/identity/connect/authorize"
+xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
+
+st.markdown(
+    f'<a href="{xero_gate_url}" target="_self">'
+    f'<button style="padding:10px 20px; background-color:#00b7e2; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">'
+    f'Sign Up / Sign In with Xero'
+    f'</button></a>', 
+    unsafe_allow_html=True
+)
 
 # ------------------------------------------------------------------------
 # LOCAL MEMORY ENGINE DATASTORE
