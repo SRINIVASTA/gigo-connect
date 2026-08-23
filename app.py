@@ -36,6 +36,9 @@ if "authenticated_user" in st.session_state:
     st.subheader("Your Secure Dashboard Workspace")
     st.info("You now have full access to internal workspace systems via Gigo Custom Sync.")
     
+    # Render user profile to prove data transferred successfully
+    st.json(current_user)
+    
     if st.button("Log Out"):
         del st.session_state.authenticated_user
         if "xero_tokens" in st.session_state:
@@ -50,7 +53,6 @@ query_params = st.query_params
 
 if "code" in query_params:
     auth_code = query_params["code"]
-    st.query_params.clear()
 
     with st.spinner("Processing token authentication handshake..."):
         token_endpoint = "https://xero.com"
@@ -60,6 +62,7 @@ if "code" in query_params:
             'redirect_uri': XERO_REDIRECT_URI
         }
         
+        # Execute direct backend network validation handshake request
         response = requests.post(
             token_endpoint, 
             data=payload, 
@@ -76,6 +79,7 @@ if "code" in query_params:
             last_name = identity_claims.get('family_name', '')
             full_name = f"{first_name} {last_name}".strip() or "User"
             
+            # --- REGISTRATION SPLIT LOGIC (Sign-Up vs Sign-In) ---
             if xero_uid not in st.session_state.mock_db:
                 st.session_state.mock_db[xero_uid] = {"email": user_email, "name": full_name}
                 st.toast(f"Account registered for {user_email}!", icon="🎉")
@@ -90,10 +94,13 @@ if "code" in query_params:
                 "access_token": token_data.get("access_token"), 
                 "refresh_token": token_data.get("refresh_token")
             }
+            
+            st.query_params.clear()
             st.rerun()
         else:
-            st.error(f"Handshake validation rejected: {response.text}")
+            st.error(f"Handshake validation rejected by Xero: {response.text}")
             if st.button("Back to Portal Screen"):
+                st.query_params.clear()
                 st.rerun()
     st.stop()
 
@@ -102,25 +109,20 @@ if "code" in query_params:
 # ------------------------------------------------------------------------
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 
-# Construct dynamic URL arguments safely via dictionary mapping
+# SECURITY SCOPE EXPANSION: Added 'offline_access' to enforce authorization feedback
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
     "redirect_uri": XERO_REDIRECT_URI,
-    "scope": "openid profile email accounting.transactions",
+    "scope": "openid profile email accounting.transactions accounting.settings offline_access",
     "state": "54321"
 }
 
 base_gateway_url = "https://xero.com"
 xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
 
-# ------------------------------------------------------------------------
-# NATIVE LINK BUTTON ROUTING
-# Native button components bypass browser iframe permission rejections
-# ------------------------------------------------------------------------
 st.link_button(
     label="Sign Up / Sign In with Xero", 
     url=xero_gate_url, 
-    type="primary",
-    use_container_width=False
+    type="primary"
 )
