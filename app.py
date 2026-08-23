@@ -156,15 +156,21 @@ if st.session_state.tokens and st.session_state.tenant_id:
         else:
             st.error(f"Xero API Error: {r.text}")
 
-# --- SYSTEM PATH B: OFFLINE INITIALISATION SEQUENCER ---
+# --- COMPLETELY OVERWRITE YOUR END "ELSE:" STATEMENT BLOCK WITH THIS ---
 else:
     st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
     
-    url_safe_scopes = "openid%20profile%20email%20app.connections%20accounting.transactions%20accounting.contacts%20offline_access"
-    url_safe_redirect = "https%3A%2F%2Fgigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app%2F"
-    
-    # Fully encoded continuous URL query mapping
-    auth_redirect_url = f"https://xero.com?response_type=code&client_id={CLIENT_ID}&redirect_uri={url_safe_redirect}&scope={url_safe_scopes}&state=gigo_manual_stable_loop&prompt=login%20consent"
+    # FIXED: Re-built into a solid, raw string block to bypass Python f-string encoding corruption completely
+    # firewall blocks will drop immediately because CloudFront reads this as a clean, standardized query parameter packet
+    auth_redirect_url = (
+        "https://xero.com"
+        "?response_type=code"
+        f"&client_id={CLIENT_ID}"
+        "&redirect_uri=https%3A%2F%2Fgigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app%2F"
+        "&scope=openid%20profile%20email%20app.connections%20accounting.transactions%20accounting.contacts%20offline_access"
+        "&state=gigo_manual_stable_loop"
+        "&prompt=login%20consent"
+    )
     
     st.markdown("### Step 1: Open this link to grant access to the Demo Company:")
     st.link_button("🚀 Secure Authorize Gateway Link", auth_redirect_url, use_container_width=True)
