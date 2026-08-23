@@ -2,7 +2,6 @@ import os
 import requests
 import jwt
 import streamlit as st
-import streamlit.components.v1 as components
 from urllib.parse import urlencode
 
 # ------------------------------------------------------------------------
@@ -116,33 +115,12 @@ base_gateway_url = "https://xero.com"
 xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
 
 # ------------------------------------------------------------------------
-# IFRAME ESCAPE JAVASCRIPT PAYLOAD
-# This injects a robust click handler forcing the parent page frame out 
+# NATIVE LINK BUTTON ROUTING
+# Native button components bypass browser iframe permission rejections
 # ------------------------------------------------------------------------
-js_escape_button = f"""
-<div style="display: flex; justify-content: start;">
-    <button id="oauth-btn" style="
-        padding: 10px 20px; 
-        background-color: #00b7e2; 
-        color: white; 
-        border: none; 
-        border-radius: 4px; 
-        cursor: pointer; 
-        font-weight: bold;
-        font-size: 14px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    ">
-        Sign Up / Sign In with Xero
-    </button>
-</div>
-
-<script>
-    document.getElementById("oauth-btn").addEventListener("click", function() {{
-        // Force the absolute outer container layout of the web page to redirect
-        window.parent.location.href = "{xero_gate_url}";
-    }});
-</script>
-"""
-
-# Render the button cleanly in line using Streamlit's official HTML engine component
-components.html(js_escape_button, height=60)
+st.link_button(
+    label="Sign Up / Sign In with Xero", 
+    url=xero_gate_url, 
+    type="primary",
+    use_container_width=False
+)
