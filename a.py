@@ -33,7 +33,7 @@ AUTH_URL = "https://xero.com"
 TOKEN_URL = "https://xero.com"
 TENANT_API_URL = "https://xero.com"
 INVOICES_API_URL = "https://xero.com"
-SCOPES = "openid%20profile%20email%20app.connections%20accounting.contacts%20accounting.invoices%20offline_access"
+SCOPES = "openid profile email app.connections accounting.contacts accounting.invoices offline_access"
 
 # Helper Export Converters
 def convert_df_to_csv(df):
