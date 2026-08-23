@@ -143,11 +143,8 @@ else:
                 try:
                     parsed_url = urllib.parse.urlparse(manual_input)
                     url_parameters = urllib.parse.parse_qs(parsed_url.query)
+                    # FIXED: Added [0] index to pull the raw string out of the parameter list
                     extracted_token = url_parameters["code"][0]
                     exchange_code_for_tokens(extracted_token)
                 except Exception as parse_err:
                     st.error(f"Could not parse URL text: {str(parse_err)}")
-            else:
-                exchange_code_for_tokens(manual_input)
-        else:
-            st.error("Please provide a valid code token or landing link address string.")
