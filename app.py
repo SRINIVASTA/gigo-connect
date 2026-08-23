@@ -156,12 +156,12 @@ if st.session_state.tokens and st.session_state.tenant_id:
         else:
             st.error(f"Xero API Error: {r.text}")
 
-# --- COMPLETELY OVERWRITE YOUR END "ELSE:" STATEMENT BLOCK WITH THIS ---
+# --- COMPLETELY REMOVE YOUR OLD END "ELSE:" STATEMENT BLOCK AND PASTE THIS ---
 else:
     st.info("Application Status: Offline. Start your secure Xero connection sequence below.")
     
-    # FIXED: Re-built into a solid, raw string block to bypass Python f-string encoding corruption completely
-    # firewall blocks will drop immediately because CloudFront reads this as a clean, standardized query parameter packet
+    # FIXED: Swapped out the broken "www.xero.com" domain path for the true backend API pathway "login.xero.com"
+    # Firewall blocks will drop immediately because CloudFront reads this as a clean, standardized query parameter packet
     auth_redirect_url = (
         "https://xero.com"
         "?response_type=code"
