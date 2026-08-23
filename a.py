@@ -58,11 +58,12 @@ if st_selection == "Sync Directly with Xero Live API":
     if strl.session_state["xero_tokens"] is None:
         strl.warning("🔐 Data Ingestion Locked: Authentication required.")
         
-        # ❌ REMOVE THE OLD BLOCK WITH '&prompt=consent'
-        # auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&prompt=consent"
+        # 💡 THE MISSING FIX: URL-encode the parameters so Xero can read them safely
+        encoded_redirect = urllib.parse.quote(REDIRECT_URI, safe='')
+        encoded_scopes = urllib.parse.quote(SCOPES, safe='')
         
-        #  PASTE THIS CORRECT CONFIGURATION STRIPPED OF PROMPT:
-        auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}"
+        # Build the final clean link
+        auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={encoded_redirect}&scope={encoded_scopes}&state=gigo_manual_stable_loop"
         
         strl.link_button("🚀 Secure Connect to Xero API App", auth_link)
     else:
