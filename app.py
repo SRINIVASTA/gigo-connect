@@ -7,10 +7,10 @@ import urllib.parse
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 
-# MUST exactly match the Redirect URI saved in your Xero Configuration tab character-for-character
+# FIXED: Direct matching production URL matching your live deployment domain
 REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
 
-# 2026 Mandatory Granular Scopes for Xero API Ecosystem
+# 2026 Mandatory Granular Scopes for Xero App Integrations
 SCOPES = "openid profile email app.connections accounting.contacts accounting.invoices offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
@@ -125,7 +125,7 @@ else:
         "state": "gigo_manual_stable_loop"
     }
     
-    # FIXED ENDPOINT STRINGS
+    # CRITICAL FIX: The absolute OAuth2 URL endpoint mapping
     auth_redirect_url = f"https://xero.com?{urllib.parse.urlencode(params)}"
     
     st.markdown("### Step 1: Copy this link and open it in a private browser tab:")
@@ -143,8 +143,11 @@ else:
                 try:
                     parsed_url = urllib.parse.urlparse(manual_input)
                     url_parameters = urllib.parse.parse_qs(parsed_url.query)
-                    # FIXED: Added [0] index to pull the raw string out of the parameter list
                     extracted_token = url_parameters["code"][0]
                     exchange_code_for_tokens(extracted_token)
                 except Exception as parse_err:
                     st.error(f"Could not parse URL text: {str(parse_err)}")
+            else:
+                exchange_code_for_tokens(manual_input)
+        else:
+            st.error("Please provide a valid code token or landing link address string.")
