@@ -8,7 +8,7 @@ CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 
 # MUST exactly match the Redirect URI saved in your Xero Configuration tab character-for-character
-REDIRECT_URI = "https://streamlit.app"
+REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
 
 # 2026 Mandatory Granular Scopes for Xero API Ecosystem
 SCOPES = "openid profile email app.connections accounting.contacts accounting.invoices offline_access"
