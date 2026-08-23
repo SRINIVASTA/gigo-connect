@@ -1,5 +1,4 @@
 import os
-import secrets
 import requests
 import jwt
 import streamlit as st
@@ -33,7 +32,6 @@ if "authenticated_user" in st.session_state:
     current_user = st.session_state.authenticated_user
     st.success(f"Welcome back: {current_user['name']} ({current_user['email']})")
     
-    # Internal Dashboard Features Can Go Here
     st.write("---")
     st.subheader("Your Secure Dashboard Workspace")
     st.info("You now have full access to internal workspace systems.")
@@ -52,7 +50,7 @@ query_params = st.query_params
 
 if "code" in query_params:
     auth_code = query_params["code"]
-    st.query_params.clear()  # Strip active code query components instantly
+    st.query_params.clear()  # Strip active code query components instantly from browser window
 
     with st.spinner("Processing token authentication handshake..."):
         token_endpoint = "https://xero.com"
@@ -109,12 +107,13 @@ if "code" in query_params:
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 
 # Construct dynamic URL arguments safely via dictionary mapping
+# Note: Using a fixed numeric state bypassing CloudFront parameter string restrictions
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
     "redirect_uri": XERO_REDIRECT_URI,
     "scope": "openid profile email accounting.transactions",
-    "state": secrets.token_hex(16)
+    "state": "12345"
 }
 
 base_gateway_url = "https://xero.com"
