@@ -5,7 +5,7 @@ import streamlit as st
 from urllib.parse import urlencode
 
 # ------------------------------------------------------------------------
-# SECRETS RETRIEVAL LAYER (Querying Streamlit Native Advanced Settings)
+# SECRETS RETRIEVAL LAYER (Streamlit Native Cloud Configurations)
 # ------------------------------------------------------------------------
 try:
     XERO_CLIENT_ID = st.secrets["XERO_CLIENT_ID"].strip()
@@ -22,8 +22,8 @@ except KeyError as e:
 if "mock_db" not in st.session_state:
     st.session_state.mock_db = {}
 
-# Main Title Framework Layout
-st.title("Gigo Connect Auth Portal")
+# Main Title Framework Layout matching your official Xero profile configuration
+st.title("Gigo Custom Sync Auth Portal")
 
 # ------------------------------------------------------------------------
 # 1. EARLY EXIT ROUTE: Active Login Session Exists
@@ -34,7 +34,7 @@ if "authenticated_user" in st.session_state:
     
     st.write("---")
     st.subheader("Your Secure Dashboard Workspace")
-    st.info("You now have full access to internal workspace systems.")
+    st.info("You now have full access to internal workspace systems via Gigo Custom Sync.")
     
     if st.button("Log Out"):
         del st.session_state.authenticated_user
@@ -107,13 +107,13 @@ if "code" in query_params:
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 
 # Construct dynamic URL arguments safely via dictionary mapping
-# Note: Using a fixed numeric state bypassing CloudFront parameter string restrictions
+# Using standard 5-digit simple state format to clear CloudFront WAF restrictions
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
     "redirect_uri": XERO_REDIRECT_URI,
     "scope": "openid profile email accounting.transactions",
-    "state": "12345"
+    "state": "54321"
 }
 
 base_gateway_url = "https://xero.com"
