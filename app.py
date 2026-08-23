@@ -22,7 +22,7 @@ except KeyError as e:
 if "mock_db" not in st.session_state:
     st.session_state.mock_db = {}
 
-# Main Title Framework Layout matching your official Xero profile configuration
+# Main Title Framework Layout
 st.title("Gigo Custom Sync Auth Portal")
 
 # ------------------------------------------------------------------------
@@ -120,8 +120,9 @@ base_gateway_url = "https://xero.com"
 xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
 
 # Render stylized action button natively in the active layout
+# CRITICAL FIX: Changing target to "_top" breaks out of Streamlit's iframe wrapper
 st.markdown(
-    f'<a href="{xero_gate_url}" target="_self">'
+    f'<a href="{xero_gate_url}" target="_top">'
     f'<button style="padding:10px 20px; background-color:#00b7e2; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">'
     f'Sign Up / Sign In with Xero'
     f'</button></a>', 
