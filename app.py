@@ -7,12 +7,21 @@ import urllib.parse
 CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
 
-# MUST exactly match the Redirect URI saved in your Xero Configuration tab character-for-character
-REDIRECT_URI = "http://localhost:8501/"
-SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
+# FIXED: Set to your exact character-for-character production Streamlit Cloud URL
+REDIRECT_URI = "https://gigo-connect-ry7k6qptubucam3xp4sahf.streamlit.app/"
+
+# FIXED: Updated to modern 2026 granular scopes required by Xero's security engine
+SCOPES = "openid profile email app.connections accounting.contacts accounting.invoices offline_access"
 
 st.set_page_config(page_title="Gigo Connect x Xero", layout="wide")
 st.title("🔗 Gigo Connect x Xero Integration")
+
+# --- UTILITY: DEV MODE CLEAR UTILITY ---
+if st.sidebar.button("🧼 Reset Cached State", help="Clears lingering session values"):
+    st.session_state.tokens = None
+    st.session_state.tenant_id = None
+    st.session_state.tenant_name = None
+    st.rerun()
 
 # Establish resilient memory caches inside the running browser session state
 if "tokens" not in st.session_state:
@@ -38,7 +47,7 @@ def exchange_code_for_tokens(code_string):
         if res.status_code == 200:
             token_json = res.json()
             
-            # Fetch connected organization configurations
+            # Connections endpoint to fetch active organization tenant data
             conn_url = "https://xero.com"
             conn_headers = {
                 "Authorization": f"Bearer {token_json['access_token']}",
@@ -49,6 +58,7 @@ def exchange_code_for_tokens(code_string):
             if conn_res.status_code == 200:
                 connections = conn_res.json()
                 if isinstance(connections, list) and len(connections) > 0:
+                    # Parse the primary connected organization dictionary object
                     primary_connection = connections[0]
                     st.session_state.tokens = token_json
                     st.session_state.tenant_id = primary_connection["tenantId"]
@@ -125,7 +135,7 @@ else:
     st.subheader("🛠️ Connection Link Dashboard")
     st.caption("Paste the resulting link text string from your address bar right back here:")
     
-    manual_input = st.text_input("Paste full address bar URL here:", placeholder="http://localhost:8501/?code=...")
+    manual_input = st.text_input("Paste full address bar URL here:", placeholder="https://streamlit.app?code=...")
     
     if st.button("⚡ 2. Finalize Connection", use_container_width=True):
         if manual_input:
