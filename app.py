@@ -2,6 +2,7 @@ import os
 import requests
 import jwt
 import streamlit as st
+import streamlit.components.v1 as components
 from urllib.parse import urlencode
 
 # ------------------------------------------------------------------------
@@ -41,7 +42,7 @@ if "authenticated_user" in st.session_state:
         if "xero_tokens" in st.session_state:
             del st.session_state.xero_tokens
         st.rerun()
-    st.stop()  # Stops execution here so no login interfaces render below
+    st.stop()
 
 # ------------------------------------------------------------------------
 # 2. HANDSHAKE PROCESSING ROUTE: Incoming Token Swap from Xero Callback
@@ -50,7 +51,7 @@ query_params = st.query_params
 
 if "code" in query_params:
     auth_code = query_params["code"]
-    st.query_params.clear()  # Strip active code query components instantly from browser window
+    st.query_params.clear()
 
     with st.spinner("Processing token authentication handshake..."):
         token_endpoint = "https://xero.com"
@@ -60,7 +61,6 @@ if "code" in query_params:
             'redirect_uri': XERO_REDIRECT_URI
         }
         
-        # Execute direct backend network validation handshake request
         response = requests.post(
             token_endpoint, 
             data=payload, 
@@ -77,13 +77,10 @@ if "code" in query_params:
             last_name = identity_claims.get('family_name', '')
             full_name = f"{first_name} {last_name}".strip() or "User"
             
-            # --- REGISTRATION SPLIT LOGIC (Sign-Up vs Sign-In) ---
             if xero_uid not in st.session_state.mock_db:
-                # Add to local database (Sign-Up Workflow)
                 st.session_state.mock_db[xero_uid] = {"email": user_email, "name": full_name}
                 st.toast(f"Account registered for {user_email}!", icon="🎉")
             
-            # Initialize Active Profile State (Sign-In Workflow)
             st.session_state.authenticated_user = {
                 "xero_id": xero_uid, 
                 "email": user_email, 
@@ -107,7 +104,6 @@ if "code" in query_params:
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 
 # Construct dynamic URL arguments safely via dictionary mapping
-# Using standard 5-digit simple state format to clear CloudFront WAF restrictions
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
@@ -119,12 +115,34 @@ oauth_params = {
 base_gateway_url = "https://xero.com"
 xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
 
-# Render stylized action button natively in the active layout
-# CRITICAL FIX: Changing target to "_top" breaks out of Streamlit's iframe wrapper
-st.markdown(
-    f'<a href="{xero_gate_url}" target="_top">'
-    f'<button style="padding:10px 20px; background-color:#00b7e2; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">'
-    f'Sign Up / Sign In with Xero'
-    f'</button></a>', 
-    unsafe_allow_html=True
-)
+# ------------------------------------------------------------------------
+# IFRAME ESCAPE JAVASCRIPT PAYLOAD
+# This injects a robust click handler forcing the parent page frame out 
+# ------------------------------------------------------------------------
+js_escape_button = f"""
+<div style="display: flex; justify-content: start;">
+    <button id="oauth-btn" style="
+        padding: 10px 20px; 
+        background-color: #00b7e2; 
+        color: white; 
+        border: none; 
+        border-radius: 4px; 
+        cursor: pointer; 
+        font-weight: bold;
+        font-size: 14px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    ">
+        Sign Up / Sign In with Xero
+    </button>
+</div>
+
+<script>
+    document.getElementById("oauth-btn").addEventListener("click", function() {{
+        // Force the absolute outer container layout of the web page to redirect
+        window.parent.location.href = "{xero_gate_url}";
+    }});
+</script>
+"""
+
+# Render the button cleanly in line using Streamlit's official HTML engine component
+components.html(js_escape_button, height=60)
