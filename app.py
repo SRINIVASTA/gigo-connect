@@ -1,6 +1,7 @@
 import os
 import requests
 import jwt
+import secrets
 import streamlit as st
 from urllib.parse import urlencode
 
@@ -17,8 +18,12 @@ except KeyError as e:
     st.stop()
 
 # ------------------------------------------------------------------------
-# LOCAL MEMORY ENGINE DATASTORE
+# DYNAMIC SEED STATE ENGINE
+# Generates a brand new unique session seed tracking code for every page hit
 # ------------------------------------------------------------------------
+if "oauth_state" not in st.session_state:
+    st.session_state.oauth_state = secrets.token_hex(8)
+
 if "mock_db" not in st.session_state:
     st.session_state.mock_db = {}
 
@@ -35,14 +40,13 @@ if "authenticated_user" in st.session_state:
     st.write("---")
     st.subheader("Your Secure Dashboard Workspace")
     st.info("You now have full access to internal workspace systems via Gigo Custom Sync.")
-    
-    # Render user profile to prove data transferred successfully
     st.json(current_user)
     
     if st.button("Log Out"):
         del st.session_state.authenticated_user
         if "xero_tokens" in st.session_state:
             del st.session_state.xero_tokens
+        st.session_state.oauth_state = secrets.token_hex(8) # Reset target tokens
         st.rerun()
     st.stop()
 
@@ -62,7 +66,6 @@ if "code" in query_params:
             'redirect_uri': XERO_REDIRECT_URI
         }
         
-        # Execute direct backend network validation handshake request
         response = requests.post(
             token_endpoint, 
             data=payload, 
@@ -79,7 +82,6 @@ if "code" in query_params:
             last_name = identity_claims.get('family_name', '')
             full_name = f"{first_name} {last_name}".strip() or "User"
             
-            # --- REGISTRATION SPLIT LOGIC (Sign-Up vs Sign-In) ---
             if xero_uid not in st.session_state.mock_db:
                 st.session_state.mock_db[xero_uid] = {"email": user_email, "name": full_name}
                 st.toast(f"Account registered for {user_email}!", icon="🎉")
@@ -109,13 +111,13 @@ if "code" in query_params:
 # ------------------------------------------------------------------------
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 
-# SECURITY SCOPE EXPANSION: Added 'offline_access' to enforce authorization feedback
+# Use the dynamic session state value to guarantee unique token sequences
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
     "redirect_uri": XERO_REDIRECT_URI,
     "scope": "openid profile email accounting.transactions accounting.settings offline_access",
-    "state": "54321"
+    "state": st.session_state.oauth_state
 }
 
 base_gateway_url = "https://xero.com"
