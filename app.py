@@ -3,23 +3,29 @@ import secrets
 import requests
 import jwt
 import streamlit as st
-from dotenv import load_dotenv
 
-load_dotenv()
+# ------------------------------------------------------------------------
+# SECRETS RETRIEVAL LAYER (Querying Streamlit Native Advanced Settings)
+# ------------------------------------------------------------------------
+try:
+    XERO_CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
+    XERO_CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
+    XERO_REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
+except KeyError as e:
+    st.error(f"Missing configuration setup key inside Streamlit Advanced Secrets: {e}")
+    st.info("Ensure your Secrets text area matches the exact naming constraints: XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI")
+    st.stop()
 
-# App Credentials Configuration
-XERO_CLIENT_ID = os.getenv("XERO_CLIENT_ID")
-XERO_CLIENT_SECRET = os.getenv("XERO_CLIENT_SECRET")
-XERO_REDIRECT_URI = os.getenv("XERO_REDIRECT_URI")
-
-# Mock Local Memory Store 
+# ------------------------------------------------------------------------
+# LOCAL MEMORY ENGINE DATASTORE
+# ------------------------------------------------------------------------
 if "mock_db" not in st.session_state:
     st.session_state.mock_db = {}
 
-# Session Controller Title Block
+# Main Title Framework Layout
 st.title("Gigo Connect Auth Portal")
 
-# 1. EARLY EXIT: If user session cookie exists, run dashboard layout instantly
+# 1. EARLY BLOCK: Handle persistent login state instantly if it exists
 if "authenticated_user" in st.session_state:
     current_user = st.session_state.authenticated_user
     st.success(f"Welcome back: {current_user['name']} ({current_user['email']})")
@@ -27,15 +33,15 @@ if "authenticated_user" in st.session_state:
         del st.session_state.authenticated_user
         if "xero_tokens" in st.session_state:
             del st.session_state.xero_tokens
-        st.experimental_rerun()
-    st.stop()  # Strictly stops Streamlit executing past this threshold line
+        st.rerun()
+    st.stop()
 
-# 2. CALLBACK DECODER LAYER: Check for incoming URL callback query parameters
+# 2. HANDSHAKE PROCESSING: Process incoming token swap parameters from Xero
 query_params = st.query_params
 
 if "code" in query_params:
     auth_code = query_params["code"]
-    st.query_params.clear()
+    st.query_params.clear()  # Strip active code query components instantly
 
     with st.spinner("Processing token authentication handshake..."):
         token_endpoint = "https://xero.com"
@@ -44,6 +50,8 @@ if "code" in query_params:
             'code': auth_code,
             'redirect_uri': XERO_REDIRECT_URI
         }
+        
+        # Execute direct backend network validation handshake request
         response = requests.post(token_endpoint, data=payload, auth=(XERO_CLIENT_ID, XERO_CLIENT_SECRET))
         
         if response.status_code == 200:
@@ -54,21 +62,21 @@ if "code" in query_params:
             user_email = identity_claims.get("email")
             full_name = f"{identity_claims.get('given_name', '')} {identity_claims.get('family_name', '')}".strip() or "User"
             
-            # Simple registration lookup layer
+            # Registration Mapping Checks
             if xero_uid not in st.session_state.mock_db:
                 st.session_state.mock_db[xero_uid] = {"email": user_email, "name": full_name}
                 st.toast(f"Account registered for {user_email}!", icon="🎉")
                 
             st.session_state.authenticated_user = {"xero_id": xero_uid, "email": user_email, "name": full_name}
             st.session_state.xero_tokens = {"access_token": token_data.get("access_token"), "refresh_token": token_data.get("refresh_token")}
-            st.experimental_rerun()
+            st.rerun()
         else:
-            st.error(f"Handshake failed: {response.text}")
-            if st.button("Back to Login"):
-                st.experimental_rerun()
+            st.error(f"Handshake validation rejected: {response.text}")
+            if st.button("Back to Portal Screen"):
+                st.rerun()
     st.stop()
 
-# 3. BASE LANDING GATEWAY: Displayed when no active session or code parameter exists
+# 3. BASE SCREEN STATE: Render initial authorization request portal layout
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 scopes = "openid profile email accounting.transactions"
 xero_gate_url = f"https://xero.com{XERO_CLIENT_ID}&redirect_uri={XERO_REDIRECT_URI}&scope={scopes}&state={secrets.token_hex(16)}"
