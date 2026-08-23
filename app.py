@@ -10,14 +10,15 @@ st.set_page_config(page_title="Gigo Custom Sync Portal", layout="centered")
 st.title("Gigo Custom Sync Portal")
 
 # ------------------------------------------------------------------------
-# SECRETS RETRIEVAL LAYER (With Runtime Sanitation)
+# SECRETS RETRIEVAL LAYER (With strict runtime string sanitation)
 # ------------------------------------------------------------------------
 if "XERO_CLIENT_ID" not in st.secrets or "XERO_CLIENT_SECRET" not in st.secrets or "XERO_REDIRECT_URI" not in st.secrets:
     st.error("🚨 CONFIGURATION ERROR: Missing keys inside Streamlit Secrets panel!")
     st.info("Ensure your Secrets text area matches exactly: XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI")
     st.stop()
 
-XERO_CLIENT_ID = str(st.secrets["XERO_CLIENT_ID"]).strip()
+# FORCE UPPERCASE ON CLIENT ID TO MATCH XERO'S PANEL DISPLAY EXACTLY
+XERO_CLIENT_ID = str(st.secrets["XERO_CLIENT_ID"]).strip().upper()
 XERO_CLIENT_SECRET = str(st.secrets["XERO_CLIENT_SECRET"]).strip()
 XERO_REDIRECT_URI = str(st.secrets["XERO_REDIRECT_URI"]).strip()
 
@@ -51,9 +52,7 @@ query_params = st.query_params
 
 if "code" in query_params:
     auth_code = query_params["code"]
-    
-    # Instantly clear query params to stop secondary tab looping behaviors
-    st.query_params.clear()
+    st.query_params.clear()  # Clear query params instantly to prevent duplicate-tab loops
 
     with st.spinner("Exchanging token handshake with Xero..."):
         token_endpoint = "https://xero.com"
@@ -64,7 +63,7 @@ if "code" in query_params:
             'redirect_uri': XERO_REDIRECT_URI
         }
         
-        # Mandatory requirement: Generate base64-encoded HTTP Basic Auth Header
+        # Enforce exact upper-case string mapping into the Base64 header structure
         raw_auth_string = f"{XERO_CLIENT_ID}:{XERO_CLIENT_SECRET}"
         encoded_auth_bytes = base64.b64encode(raw_auth_string.encode("utf-8"))
         encoded_auth_string = encoded_auth_bytes.decode("utf-8")
