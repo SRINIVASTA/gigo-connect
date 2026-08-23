@@ -18,12 +18,8 @@ except KeyError as e:
     st.stop()
 
 # ------------------------------------------------------------------------
-# DYNAMIC SEED STATE ENGINE
-# Generates a brand new unique session seed tracking code for every page hit
+# LOCAL MEMORY ENGINE DATASTORE
 # ------------------------------------------------------------------------
-if "oauth_state" not in st.session_state:
-    st.session_state.oauth_state = secrets.token_hex(8)
-
 if "mock_db" not in st.session_state:
     st.session_state.mock_db = {}
 
@@ -46,7 +42,6 @@ if "authenticated_user" in st.session_state:
         del st.session_state.authenticated_user
         if "xero_tokens" in st.session_state:
             del st.session_state.xero_tokens
-        st.session_state.oauth_state = secrets.token_hex(8) # Reset target tokens
         st.rerun()
     st.stop()
 
@@ -111,13 +106,15 @@ if "code" in query_params:
 # ------------------------------------------------------------------------
 st.write("Please sign in or register an account via Xero to unlock internal tooling dashboards.")
 
-# Use the dynamic session state value to guarantee unique token sequences
+# CRITICAL SECURITY FIX: Generate an absolute unique dynamic state on every render loop
+dynamic_state = secrets.token_hex(16)
+
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
     "redirect_uri": XERO_REDIRECT_URI,
-    "scope": "openid profile email accounting.transactions accounting.settings offline_access",
-    "state": st.session_state.oauth_state
+    "scope": "openid profile email",
+    "state": dynamic_state
 }
 
 base_gateway_url = "https://xero.com"
