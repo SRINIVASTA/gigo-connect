@@ -57,7 +57,13 @@ active_matrix_df = None
 if st_selection == "Sync Directly with Xero Live API":
     if strl.session_state["xero_tokens"] is None:
         strl.warning("🔐 Data Ingestion Locked: Authentication required.")
-        auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&prompt=consent"
+        
+        # ❌ REMOVE THE OLD BLOCK WITH '&prompt=consent'
+        # auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&prompt=consent"
+        
+        #  PASTE THIS CORRECT CONFIGURATION STRIPPED OF PROMPT:
+        auth_link = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}"
+        
         strl.link_button("🚀 Secure Connect to Xero API App", auth_link)
     else:
         active_matrix_df = strl.session_state["xero_df"]
