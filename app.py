@@ -14,14 +14,14 @@ st.title("Gigo Custom Sync Portal")
 # SECRETS RETRIEVAL LAYER (Strictly NO Client Secret Required for PKCE)
 # ------------------------------------------------------------------------
 try:
-    # Aggressively strip spaces, line breaks, and lower-case the ID to match PKCE standards
+    # Read the ID as a clean lowercase string natively
     XERO_CLIENT_ID = str(st.secrets["XERO_CLIENT_ID"]).replace(" ", "").strip().lower()
     XERO_REDIRECT_URI = str(st.secrets["XERO_REDIRECT_URI"]).replace(" ", "").strip()
 except KeyError as e:
     st.error(f"🚨 CONFIGURATION ERROR: Missing key in Streamlit Secrets: {e}")
     st.stop()
 
-# Initialize a secure, unique cryptographic verifier string in memory
+# Initialize unique dynamic verification state constraints
 if "code_verifier" not in st.session_state:
     st.session_state.code_verifier = secrets.token_urlsafe(64)
 
@@ -42,18 +42,18 @@ if "authenticated_user" in st.session_state:
     st.stop()
 
 # ------------------------------------------------------------------------
-# STATE 2: Incoming Redirection Data Handler from Xero
+# STATE 2: Incoming Redirection Data Handler from Xero Callback Loop
 # ------------------------------------------------------------------------
 query_params = st.query_params
 
 if "code" in query_params:
     auth_code = query_params["code"]
-    st.query_params.clear()  # Clear params instantly to prevent loop triggers
+    st.query_params.clear()  # Strip active code indicators instantly from view URL
 
     with st.spinner("Processing zero-secret PKCE authentication handshake..."):
         token_endpoint = "https://xero.com"
         
-        # PKCE payload rules: We pass the client_id and the unhashed code_verifier instead of a secret
+        # Test Payload parameters matching standard PKCE protocol structures
         payload = {
             'grant_type': 'authorization_code',
             'client_id': XERO_CLIENT_ID,
@@ -66,8 +66,12 @@ if "code" in query_params:
             "Content-Type": "application/x-www-form-urlencoded"
         }
         
-        # Pure frontend/browser POST request without exposing any corporate secrets
         response = requests.post(token_endpoint, data=payload, headers=headers)
+        
+        # Fallback Strategy: If lowercase fails due to old registry configurations, try Uppercase
+        if response.status_code != 200:
+            payload['client_id'] = XERO_CLIENT_ID.upper()
+            response = requests.post(token_endpoint, data=payload, headers=headers)
         
         if response.status_code == 200:
             token_data = response.json()
@@ -102,10 +106,10 @@ if "code" in query_params:
 # ------------------------------------------------------------------------
 st.write("Please click the button below to authenticate using Xero Secure Identity.")
 
-# Cryptographically encode our local verifier string using SHA-256 for Xero
+# Cryptographically encode the local verifier string using SHA-256 for Xero
 hashed_verifier = hashlib.sha256(st.session_state.code_verifier.encode('utf-8')).digest()
 base64_encoded = base64.urlsafe_b64encode(hashed_verifier).decode('utf-8')
-code_challenge = base64_encoded.replace('=', '')  # Remove base64 padding characters
+code_challenge = base64_encoded.replace('=', '')  # Strip trailing padding markers
 
 oauth_params = {
     "response_type": "code",
@@ -114,7 +118,7 @@ oauth_params = {
     "scope": "openid profile email",
     "state": "gigo_pkce_sync",
     "code_challenge": code_challenge,
-    "code_challenge_method": "S256"  # Tell Xero to expect a secure SHA-256 challenge string
+    "code_challenge_method": "S256"
 }
 
 base_gateway_url = "https://xero.com"
