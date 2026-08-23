@@ -26,11 +26,14 @@ if "oauth_state" not in st.session_state:
     st.session_state.oauth_state = secrets.token_hex(8)
 
 # ------------------------------------------------------------------------
-# STATE 1: Active User Session Is Open
+# STATE 1: Active User Session Is Open (Successful Login)
 # ------------------------------------------------------------------------
 if "authenticated_user" in st.session_state:
     current_user = st.session_state.authenticated_user
     st.success(f"🎉 Login Successful! Welcome, {current_user['name']}!")
+    
+    st.write("---")
+    st.subheader("👤 Authenticated Profile Details")
     st.json(current_user)
     
     if st.button("Log Out and Reset"):
@@ -49,12 +52,12 @@ query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
     
-    st.info("🔄 Authorization code captured from URL! Exchanging tokens using secure Web App headers...")
+    # Instantly clear query params to stop secondary tab looping behaviors
+    st.query_params.clear()
 
-    with st.spinner("Exchanging token handshake..."):
+    with st.spinner("Exchanging token handshake with Xero..."):
         token_endpoint = "https://xero.com"
         
-        # Standard web server flow payload data
         payload = {
             'grant_type': 'authorization_code',
             'code': auth_code,
@@ -83,7 +86,7 @@ if "code" in query_params:
             last_name = identity_claims.get('family_name', '')
             full_name = f"{first_name} {last_name}".strip() or "User"
             
-            # Map tracking parameters into active memory session
+            # Commit payload back into user session state memory
             st.session_state.authenticated_user = {
                 "xero_id": xero_uid, 
                 "email": user_email, 
@@ -93,15 +96,12 @@ if "code" in query_params:
                 "access_token": token_data.get("access_token"), 
                 "refresh_token": token_data.get("refresh_token")
             }
-            
-            st.query_params.clear()
             st.rerun()
         else:
             st.error("❌ Xero API Handshake Rejected!")
             st.warning(f"HTTP Status Code: {response.status_code}")
             st.code(response.text, language="json")
             if st.button("Clear and Try Again"):
-                st.query_params.clear()
                 st.rerun()
     st.stop()
 
