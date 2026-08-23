@@ -74,7 +74,6 @@ else:
                     "access_token": token_data.get("access_token"),
                     "refresh_token": token_data.get("refresh_token")
                 }
-                
                 st.rerun()
             else:
                 st.error(f"Xero credential verification failed: {response.text}")
