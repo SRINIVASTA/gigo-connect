@@ -11,10 +11,9 @@ st.set_page_config(page_title="Gigo Custom Sync Portal", layout="centered")
 st.title("Gigo Custom Sync Portal")
 
 # ------------------------------------------------------------------------
-# SECRETS RETRIEVAL LAYER (No Client Secret Required for PKCE Flow)
+# SECRETS RETRIEVAL LAYER (Strictly NO Client Secret Required for PKCE Flow)
 # ------------------------------------------------------------------------
 try:
-    # Aggressively sanitize client credentials to completely eliminate whitespace loops
     XERO_CLIENT_ID = str(st.secrets["XERO_CLIENT_ID"]).replace(" ", "").strip().lower()
     XERO_REDIRECT_URI = str(st.secrets["XERO_REDIRECT_URI"]).replace(" ", "").strip()
 except KeyError as e:
@@ -32,7 +31,6 @@ if "code_verifier" not in st.session_state:
 if "authenticated_user" in st.session_state:
     current_user = st.session_state.authenticated_user
     st.success(f"🎉 Login Successful! Welcome, {current_user['name']}!")
-    
     st.write("---")
     st.subheader("👤 Your Authenticated User Payload Data")
     st.json(current_user)
@@ -57,7 +55,6 @@ if "code" in query_params:
     with st.spinner("Exchanging token handshake via secure PKCE rules..."):
         token_endpoint = "https://xero.com"
         
-        # PKCE transaction token parameters
         payload = {
             'grant_type': 'authorization_code',
             'client_id': XERO_CLIENT_ID,
@@ -87,7 +84,6 @@ if "code" in query_params:
             last_name = identity_claims.get('family_name', '')
             full_name = f"{first_name} {last_name}".strip() or "User"
             
-            # Anchor user profile to state context memory
             st.session_state.authenticated_user = {
                 "xero_id": xero_uid, 
                 "email": user_email, 
@@ -114,13 +110,13 @@ st.write("Please click the button below to authorize using Xero Secure Identity.
 # Generate PKCE cryptographically hashed token challenge
 hashed_verifier = hashlib.sha256(st.session_state.code_verifier.encode('utf-8')).digest()
 base64_encoded = base64.urlsafe_b64encode(hashed_verifier).decode('utf-8')
-code_challenge = base64_encoded.replace('=', '')  # Strip trailing padding elements
+code_challenge = base64_encoded.replace('=', '')
 
 oauth_params = {
     "response_type": "code",
     "client_id": XERO_CLIENT_ID,
     "redirect_uri": XERO_REDIRECT_URI,
-    "scope": "openid profile email accounting.transactions.read",
+    "scope": "openid profile email accounting.transactions.read accounting.settings.read",
     "state": "gigo_pkce_sync_session",
     "code_challenge": code_challenge,
     "code_challenge_method": "S256"
@@ -129,12 +125,7 @@ oauth_params = {
 base_gateway_url = "https://xero.com"
 xero_gate_url = f"{base_gateway_url}?{urlencode(oauth_params)}"
 
-# NATIVE STREAMLIT BUTTON: Responds instantly, breaking out of the iframe cage safely in a new tab context
-st.link_button(
-    label="🔑 Sign Up / Sign In with Xero", 
-    url=xero_gate_url, 
-    type="primary"
-)
+st.link_button(label="🔑 Sign Up / Sign In with Xero", url=xero_gate_url, type="primary")
 
 st.write("---")
 st.subheader("🔧 Live Redirect Debugger Data")
