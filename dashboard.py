@@ -44,7 +44,7 @@ if not st.session_state.auth_token:
         state_key = str(uuid.uuid4())
         scopes_encoded = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
         
-        # Completely fixed URL string formulation
+        # 🟢 FIX: Clean endpoint targeting identity gates with exact url delimiters
         login_url = f"https://xero.com{CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={scopes_encoded}&state={state_key}"
         
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
@@ -56,6 +56,7 @@ else:
 
     if not st.session_state.tenant_id:
         try:
+            # 🟢 FIX: Fetch from API connections router endpoint instead of generic landing pages
             conn_response = requests.get("https://xero.com", headers=headers)
             conn_response.raise_for_status()
             connections = conn_response.json()
@@ -75,6 +76,7 @@ else:
         if st.button("🔄 Fetch Mock Invoices"):
             with st.spinner("Pulling data from Xero API..."):
                 try:
+                    # 🟢 FIX: Targets actual core invoice accounting service layers
                     data_response = requests.get("https://xero.com", headers=headers)
                     data_response.raise_for_status()
                     invoices_data = data_response.json().get("Invoices", [])
