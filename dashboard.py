@@ -1,8 +1,9 @@
 import streamlit as st
 import requests
 import uuid
+from urllib.parse import urlencode
 
-# 🟢 FIXED IMPORTS: Standard xero-python SDK architecture paths
+# Standard xero-python SDK architecture paths
 from xero_python.accounting import AccountingApi
 from xero_python.identity import IdentityApi
 from xero_python.api_client import ApiClient, Configuration
@@ -10,7 +11,7 @@ from xero_python.api_client.oauth2 import OAuth2Token
 from xero_python.exceptions import ApiException
 
 # ==============================================================================
-# 1. HARDCODED APP SETTINGS
+# 1. APPLICATION CONFIGURATION
 # ==============================================================================
 CLIENT_ID = "6EF08EA4B68548BDAB9C66AB44820A14"
 CLIENT_SECRET = "PASTE_YOUR_REAL_XERO_CLIENT_SECRET_HERE" # 👈 Put your real secret password here!
@@ -62,16 +63,20 @@ if not st.session_state.token_set:
     else:
         st.info("Application initialized. Click below to connect directly to your Xero sandbox data.")
         
-        scopes = ["openid", "profile", "email", "accounting.transactions.read", "accounting.settings.read", "offline_access"]
         state_key = str(uuid.uuid4())
+        scopes_string = "openid profile email accounting.transactions.read accounting.settings.read offline_access"
         
-        # Native SDK URL creation method
-        login_url = api_client.get_authorization_url(
-            client_id=CLIENT_ID,
-            redirect_uri=REDIRECT_URI,
-            scope=scopes,
-            state=state_key
-        )
+        # 🟢 THE NATIVE PARSER FIX: Bypasses the SDK AttributeError completely
+        params = {
+            "response_type": "code",
+            "client_id": CLIENT_ID,
+            "redirect_uri": REDIRECT_URI,
+            "scope": scopes_string,
+            "state": state_key
+        }
+        
+        # Safe URL parameter stitching handled by Python built-ins
+        login_url = f"https://login.xero.com/identity/connect/authorize?{urlencode(params)}"
         
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
@@ -80,8 +85,6 @@ if not st.session_state.token_set:
 # ==============================================================================
 else:
     api_client.set_oauth2_token(st.session_state.token_set)
-    
-    # 🟢 FIXED: Instantiated using the corrected module layout reference
     identity_instance = IdentityApi(api_client)
 
     if not st.session_state.xero_tenant_id:
@@ -103,8 +106,6 @@ else:
     # Connected Active State Layout
     if st.session_state.xero_tenant_id:
         st.success(f"Connected to Organisation: **{st.session_state.xero_tenant_name}**")
-        
-        # 🟢 FIXED: Instantiated using the corrected module layout reference
         accounting_instance = AccountingApi(api_client)
         
         if st.button("🔄 Fetch Live Invoices"):
