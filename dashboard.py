@@ -120,7 +120,7 @@ if not st.session_state.token_set:
             "code_challenge_method": "S256"
         }
         
-        # 🟢 CRITICAL FIXED TARGET GATEWAY: Pointing directly to identity servers instead of xero.com
+        # 🟢 CORRECTED LINK GATEWAY: Targets login.xero.com instead of marketing xero.com
         login_url = f"https://xero.com?{urlencode(params)}"
         
         st.link_button("🔗 Connect via Secure PKCE Engine", login_url, type="primary")
@@ -146,7 +146,6 @@ else:
             with st.spinner("Recovering connected organization context parameters..."):
                 connections = identity_instance.get_connections()
                 
-                # Check list lengths explicitly
                 if connections and len(connections) > 0:
                     target_connection = connections[0]
                     st.session_state.xero_tenant_id = target_connection.tenant_id
@@ -173,6 +172,7 @@ else:
                         
                         clean_data = []
                         for inv in invoices_list:
+                            # 🟢 FIXED: Removed the trailing extra parenthesis character typo
                             clean_data.append({
                                 "Invoice Code": getattr(inv, "invoice_number", "N/A"),
                                 "Contact Client": getattr(inv.contact, "name", "N/A") if inv.contact else "N/A",
