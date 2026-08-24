@@ -1,126 +1,134 @@
 import streamlit as st
-import requests
 import uuid
+from xero_python.api import accounting_api, identity_api
+from xero_python.api_client import ApiClient, Configuration
+from xero_python.api_client.oauth2 import OAuth2Token
+from xero_python.exceptions import ApiException
 
 # ==============================================================================
-# 1. DIRECT APP CONFIGURATION
+# 1. SDK CONFIGURATION INITIALIZATION
 # ==============================================================================
+# Hardcoded to match your exact requested app profile values 
 CLIENT_ID = "6EF08EA4B68548BDAB9C66AB44820A14"
-CLIENT_SECRET = "PASTE_YOUR_REAL_XERO_CLIENT_SECRET_HERE"  # 👈 Paste your real client secret here
-
-# Must match your current active deployment address perfectly
+CLIENT_SECRET = "PASTE_YOUR_REAL_XERO_CLIENT_SECRET_HERE" # 👈 Put your password secret here!
 REDIRECT_URI = "https://gigo-connect-b9jsvgyo56lnxhi6juansy.streamlit.app/"
 
-# ==============================================================================
-# 2. STREAMLIT INITIALIZATION & SESSION MEMORY
-# ==============================================================================
-st.set_page_config(page_title="Xero Direct Dashboard", layout="wide")
-st.title("📊 Xero Direct Data Dashboard")
-
-# Initialize structural properties to manage page states safely
-if "auth_token" not in st.session_state:
-    st.session_state.auth_token = None
-if "tenant_id" not in st.session_state:
-    st.session_state.tenant_id = None
-if "tenant_name" not in st.session_state:
-    st.session_state.tenant_name = None
+# Initialise standard SDK client structures natively
+config = Configuration(
+    oauth2_token=OAuth2Token(
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET
+    )
+)
+api_client = ApiClient(configuration=config)
 
 # ==============================================================================
-# STEP 1: AUTHENTICATION HANDSHAKE
+# 2. UI LAYOUT & MEMORY STATES SETUP
 # ==============================================================================
-if not st.session_state.auth_token:
+st.set_page_config(page_title="Xero SDK Dashboard", layout="wide")
+st.title("📊 Xero Direct Native SDK Engine")
+
+if "token_set" not in st.session_state:
+    st.session_state.token_set = None
+if "xero_tenant_id" not in st.session_state:
+    st.session_state.xero_tenant_id = None
+if "xero_tenant_name" not in st.session_state:
+    st.session_state.xero_tenant_name = None
+
+# ==============================================================================
+# STEP 1: AUTHENTICATION FLOW VIA NATIVE SDK LINK
+# ==============================================================================
+if not st.session_state.token_set:
     query_params = st.query_params
     
-    # Process code if redirected back from Xero gate
     if "code" in query_params:
         auth_code = query_params["code"]
-        with st.spinner("Exchanging authorization code for token..."):
+        with st.spinner("Exchanging token set via Python SDK..."):
             try:
-                response = requests.post(
-                    "https://xero.com", 
-                    data={
-                        "grant_type": "authorization_code",
-                        "code": auth_code,
-                        "redirect_uri": REDIRECT_URI
-                    }, 
-                    auth=(CLIENT_ID, CLIENT_SECRET)
+                # 🟢 SDK handles the authorization token swap natively behind the scenes
+                token_set = api_client.get_oauth2_token_by_code(
+                    auth_code, 
+                    client_id=CLIENT_ID, 
+                    client_secret=CLIENT_SECRET, 
+                    redirect_uri=REDIRECT_URI
                 )
-                response.raise_for_status()
-                st.session_state.auth_token = response.json().get("access_token")
+                st.session_state.token_set = token_set
                 st.query_params.clear()
                 st.rerun()
             except Exception as e:
-                st.error(f"Token exchange failed. Double check your Client Secret value. Error: {e}")
+                st.error(f"SDK Token Validation Failed: {e}")
     else:
-        st.info("Your application is live. Click below to connect directly to your Xero sandbox data.")
+        st.info("Application initialized. Click below to connect directly to your Xero sandbox data.")
         
+        # Scopes array items map to explicit permissions strings requested
+        scopes = ["openid", "profile", "email", "accounting.transactions.read", "accounting.settings.read", "offline_access"]
         state_key = str(uuid.uuid4())
-        scopes = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
         
-        # 🟢 RECHECKED & VERIFIED LINK: Explicit delimiters prevent domain mashups
-        login_url = f"https://xero.com{CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={scopes}&state={state_key}"
+        # 🟢 NATIVE SDK BUILDER: Formats parameters perfectly to bypass xero.com6ef0... typo bugs
+        login_url = api_client.get_authorization_url(
+            client_id=CLIENT_ID,
+            redirect_uri=REDIRECT_URI,
+            scope=scopes,
+            state=state_key
+        )
         
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
 # ==============================================================================
-# STEP 2: ORGANISATION TARGETING & DATA FETCHING
+# STEP 2: RECOVERY OF REVENUE METRICS AND LIVE INVOICES
 # ==============================================================================
 else:
-    headers = {
-        "Authorization": f"Bearer {st.session_state.auth_token}",
-        "Content-Type": "application/json"
-    }
+    # Hydrate configuration token profiles back into the client layer framework
+    api_client.set_oauth2_token(st.session_state.token_set)
+    identity_instance = identity_api.IdentityApi(api_client)
 
-    # Fetch organization parameters if token is valid but context details are blank
-    if not st.session_state.tenant_id:
+    if not st.session_state.xero_tenant_id:
         try:
-            conn_response = requests.get("https://xero.com", headers=headers)
-            conn_response.raise_for_status()
-            connections = conn_response.json()
-            
-            # 🟢 RECHECKED & VERIFIED FIX: Connections returns a list array, not a dictionary object
-            if isinstance(connections, list) and len(connections) > 0:
-                st.session_state.tenant_id = connections[0]["tenantId"]
-                st.session_state.tenant_name = connections[0]["tenantName"]
-                st.rerun()
-            else:
-                st.error("No active connected Xero organizations found. Please connect a Demo Company.")
-        except Exception as e:
-            st.error(f"Failed to extract connected Xero organization profiles: {e}")
+            with st.spinner("Recovering connected organization parameters..."):
+                connections = identity_instance.get_connections()
+                
+                if connections and len(connections) > 0:
+                    # Select the primary connection mapping layout
+                    target_connection = connections[0]
+                    st.session_state.xero_tenant_id = target_connection.tenant_id
+                    st.session_state.xero_tenant_name = target_connection.tenant_name
+                    st.rerun()
+                else:
+                    st.error("No active connections found. Please check your Demo Company settings.")
+        except ApiException as e:
+            st.error(f"Xero SDK Parameter Extraction Exception: {e}")
 
-    # Display data dashboard once tenant arrays are extracted successfully
-    if st.session_state.tenant_id:
-        st.success(f"Connected Directly to Xero Organisation: **{st.session_state.tenant_name}**")
-        
-        # Inject the active organizational token header required for records reading calls
-        headers["Xero-tenant-id"] = st.session_state.tenant_id
+    # Display Active Live Dashboard UI Elements
+    if st.session_state.xero_tenant_id:
+        st.success(f"Connected to Xero Organisation: **{st.session_state.xero_tenant_name}**")
+        accounting_instance = accounting_api.AccountingApi(api_client) #
         
         if st.button("🔄 Fetch Live Invoices"):
-            with st.spinner("Streaming tables from Xero Core Accounting Database..."):
+            with st.spinner("Extracting invoice records data blocks..."):
                 try:
-                    data_response = requests.get("https://xero.com", headers=headers)
-                    data_response.raise_for_status()
-                    invoices_data = data_response.json().get("Invoices", [])
+                    # Read records data directly via accounting client components
+                    api_response = accounting_instance.get_invoices(st.session_state.xero_tenant_id)
+                    invoices_list = api_response.invoices
                     
-                    if invoices_data:
-                        st.write(f"### Found {len(invoices_data)} Real-Time Invoices")
-                        clean_invoices = [
-                            {
-                                "Invoice ID": inv.get("InvoiceNumber", "N/A"), 
-                                "Client Name": inv.get("Contact", {}).get("Name", "N/A"), 
-                                "Invoice Date": inv.get("DateString", "N/A"),
-                                "Gross Value": inv.get("Total", 0.0)
-                            } 
-                            for inv in invoices_data
-                        ]
-                        st.dataframe(clean_invoices, use_container_width=True)
+                    if invoices_list:
+                        st.write(f"### Found {len(invoices_list)} Invoices")
+                        
+                        clean_list = []
+                        for inv in invoices_list:
+                            clean_list.append({
+                                "Invoice Code": getattr(inv, "invoice_number", "N/A"),
+                                "Contact Client": getattr(inv.contact, "name", "N/A") if inv.contact else "N/A",
+                                "Gross Total": getattr(inv, "total", 0.0)
+                            })
+                        
+                        st.dataframe(clean_list, use_container_width=True)
                     else:
-                        st.warning("No invoices found inside your current Xero Demo Company dataset.")
-                except Exception as e:
-                    st.error(f"Failed to load invoice transaction datastream: {e}")
+                        st.warning("No invoices found in your Demo Company database.")
+                except ApiException as e:
+                    st.error(f"Accounting instance read execution failure: {e}")
                     
         if st.sidebar.button("Disconnect Session"):
-            st.session_state.auth_token = None
-            st.session_state.tenant_id = None
-            st.session_state.tenant_name = None
+            st.session_state.token_set = None
+            st.session_state.xero_tenant_id = None
+            st.session_state.xero_tenant_name = None
             st.rerun()
