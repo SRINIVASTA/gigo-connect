@@ -5,7 +5,7 @@ import uuid
 # HARDCODED CONFIGURATION - Bypasses secrets entirely to prevent bugs
 CLIENT_ID = "6EF08EA4B68548BDAB9C66AB44820A14"
 CLIENT_SECRET = "PASTE_YOUR_REAL_XERO_CLIENT_SECRET_HERE" # 👈 Put your password secret here!
-REDIRECT_URI = "https://streamlit.app"
+REDIRECT_URI = "https://gigo-connect-b9jsvgyo56lnxhi6juansy.streamlit.app/"
 
 st.set_page_config(page_title="Xero Mock Data Dashboard", layout="wide")
 st.title("📊 Xero Demo Data Fetcher")
