@@ -62,13 +62,8 @@ if not st.session_state.auth_token:
         state_key = str(uuid.uuid4())
         login_url = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&state={state_key}"
         
-        st.markdown(
-            f'<a href="{login_url}" target="_self" style="text-decoration:none;">'
-            f'<button style="background-color:#00b7e4; color:white; border:none; '
-            f'padding:10px 20px; border-radius:5px; font-size:16px; cursor:pointer;">'
-            f'🔗 Connect to Xero Demo Company</button></a>', 
-            unsafe_allow_html=True  # 👈 Changed this line
-        )
+        # 👇 REPLACE YOUR OLD st.markdown BLOCK WITH THIS:
+        st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
 # Step 2: Authenticated State - Fetch Connections and Data
 else:
