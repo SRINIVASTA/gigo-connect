@@ -2,10 +2,13 @@ import streamlit as st
 import requests
 import uuid
 
-# 1. Configuration - Replace with your Xero Developer Portal credentials
+# 🔴 Change this main URL in your app config section
+AUTH_URL = "https://login.xero.com/identity/connect/authorize" 
+
+# Keep everything else the same:
 CLIENT_ID = "YOUR_XERO_CLIENT_ID"
-CLIENT_SECRET = "YOUR_XERO_CLIENT_SECRET"
-REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/"  # Default Streamlit local URL
+REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/"
+SCOPES = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
 
 # Xero OAuth 2.0 Endpoints
 AUTH_URL = "https://xero.com"
