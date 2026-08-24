@@ -3,20 +3,45 @@ import requests
 import uuid
 
 # ==============================================================================
-# 1. CONFIGURATION (Drawn securely from Streamlit Secrets)
+# STEP 1: AUTHENTICATION FLOW
 # ==============================================================================
-CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
-CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
-
-# 🟢 THE REAL FIXED ENDPOINTS - DO NOT SET THESE TO JUST XERO.COM
-AUTH_URL = "https://xero.com"
-TOKEN_URL = "https://xero.com"
-CONNECTIONS_URL = "https://xero.com"
-INVOICES_URL = "https://xero.com"
-
-# URL encoded scopes for stable OAuth handshake
-SCOPES = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
+if not st.session_state.auth_token:
+    query_params = st.query_params
+    
+    if "code" in query_params:
+        auth_code = query_params["code"]
+        
+        with st.spinner("Exchanging code for access token..."):
+            payload = {
+                "grant_type": "authorization_code",
+                "code": auth_code,
+                "redirect_uri": REDIRECT_URI
+            }
+            try:
+                # Direct backend exchange call
+                response = requests.post(
+                    "https://xero.com", 
+                    data=payload, 
+                    auth=(CLIENT_ID, CLIENT_SECRET)
+                )
+                response.raise_for_status()
+                token_data = response.json()
+                st.session_state.auth_token = token_data.get("access_token")
+                
+                st.query_params.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to fetch token. Check your Secret keys. Error: {e}")
+    else:
+        st.info("You need to connect to your Xero Developer Account to pull mock data.")
+        
+        state_key = str(uuid.uuid4())
+        scopes_encoded = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
+        
+        # 🟢 DIRECT COUPLING: Hardcoded endpoint avoids variable caching bugs entirely
+        login_url = f"https://login.xero.com/identity/connect/authorize?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={scopes_encoded}&state={state_key}"
+        
+        st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
 # ==============================================================================
 # 2. STREAMLIT PAGE SETUP & SESSION MANAGEMENT
