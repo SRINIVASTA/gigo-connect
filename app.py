@@ -44,12 +44,12 @@ if not st.session_state.auth_token:
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
 # ==============================================================================
-# 2. STREAMLIT PAGE SETUP & SESSION MANAGEMENT
+# 2. STREAMLIT PAGE SETUP & STATE INITIALIZATION
 # ==============================================================================
 st.set_page_config(page_title="Xero Mock Data Dashboard", layout="wide")
 st.title("📊 Xero Demo Data Fetcher")
 
-# Initialize session state tracking
+# 🟢 CRITICAL FIX: Initialize session state keys to prevent "AttributeError"
 if "auth_token" not in st.session_state:
     st.session_state.auth_token = None
 if "tenant_id" not in st.session_state:
@@ -60,6 +60,7 @@ if "tenant_name" not in st.session_state:
 # ==============================================================================
 # STEP 1: AUTHENTICATION FLOW
 # ==============================================================================
+    # Rest of your code continues safely below...
 if not st.session_state.auth_token:
     query_params = st.query_params
     
