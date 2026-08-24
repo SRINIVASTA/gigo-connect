@@ -5,15 +5,11 @@ import uuid
 # ==============================================================================
 # 1. CONFIGURATION (Drawn securely from Streamlit Secrets)
 # ==============================================================================
-try:
-    CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
-    CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-    REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
-except KeyError as e:
-    st.error(f"Missing configuration key in Streamlit Secrets: {e}")
-    st.stop()
+CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
+CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
+REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
 
-# Fixed Authentication and API Endpoints
+# 🟢 THE REAL FIXED ENDPOINTS - DO NOT SET THESE TO JUST XERO.COM
 AUTH_URL = "https://xero.com"
 TOKEN_URL = "https://xero.com"
 CONNECTIONS_URL = "https://xero.com"
