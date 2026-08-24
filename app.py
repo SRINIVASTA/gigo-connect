@@ -67,6 +67,7 @@ if not st.session_state.auth_token:
         
         # 🟢 SECURE HARDCOUPLED TARGET: Points strictly to login.xero.com
         login_url = f"https://xero.com{CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={scopes_encoded}&state={state_key}"
+
         
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
