@@ -2,15 +2,25 @@ import streamlit as st
 import requests
 import uuid
 
-# 1. Configuration - Look at the top of your app.py file
-CLIENT_ID = "YOUR_XERO_CLIENT_ID"       # 🔴 Make sure to paste your real client ID here!
+# ==============================================================================
+# 1. CONFIGURATION 
+# ==============================================================================
+# 🔴 1. REPLACE THESE WITH YOUR ACTUAL HEXADECIMAL CODES FROM XERO DEVELOPER PORTAL
+CLIENT_ID = "YOUR_XERO_CLIENT_ID"       
 CLIENT_SECRET = "YOUR_XERO_CLIENT_SECRET"
-REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/" 
 
-# 🔴 FIX THIS URL (Change www.xero.com to ://xero.com)
-AUTH_URL = "https://://xero.com" 
+# 🔴 2. FIXED REDIRECT URI: Must match your actual app link perfectly
+REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/"
 
-# URL encoded scopes to ensure stability
+# 🔴 3. FIXED AUTH_URL: Cleaned up the broken slashes completely
+AUTH_URL = "https://xero.com"
+
+# Keep these standard endpoints exactly as they are
+TOKEN_URL = "https://xero.com"
+CONNECTIONS_URL = "https://xero.com"
+INVOICES_URL = "https://xero.com"
+
+# URL encoded scopes for stable authentication
 SCOPES = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
 
 
