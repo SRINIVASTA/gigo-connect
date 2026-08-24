@@ -3,15 +3,15 @@ import requests
 import uuid
 
 # ==============================================================================
-# 1. READ SECRETS SAFELY (Drawn securely from Streamlit Cloud Secrets)
+# 1. HARDCODED CONFIGURATION (Bypasses Secrets to prevent layout typos)
 # ==============================================================================
-try:
-    CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
-    CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
-    REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
-except KeyError as e:
-    st.error(f"Missing configuration key in Streamlit Secrets: {e}")
-    st.stop()
+CLIENT_ID = "6EF08EA4B68548BDAB9C66AB44820A14"
+
+# 🔴 MANUALLY PASTE YOUR SECRET VALUE KEY INSIDE THESE QUOTES
+CLIENT_SECRET = "PASTE_YOUR_REAL_XERO_CLIENT_SECRET_HERE"
+
+# Clean routing destination path parameter 
+REDIRECT_URI = "https://gigo-connect-lyybdxuupybqvz28zt3wpc.streamlit.app/"
 
 # ==============================================================================
 # 2. STREAMLIT PAGE SETUP & STATE INITIALIZATION
