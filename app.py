@@ -2,19 +2,16 @@ import streamlit as st
 import requests
 import uuid
 
-# 🔴 Change this main URL in your app config section
-AUTH_URL = "https://login.xero.com/identity/connect/authorize" 
+# 1. Configuration - Look at the top of your app.py file
+CLIENT_ID = "YOUR_XERO_CLIENT_ID"       # 🔴 Make sure to paste your real client ID here!
+CLIENT_SECRET = "YOUR_XERO_CLIENT_SECRET"
+REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/" 
 
-# Keep everything else the same:
-CLIENT_ID = "YOUR_XERO_CLIENT_ID"
-REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/"
+# 🔴 FIX THIS URL (Change www.xero.com to ://xero.com)
+AUTH_URL = "https://://xero.com" 
+
+# URL encoded scopes to ensure stability
 SCOPES = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
-
-# Xero OAuth 2.0 Endpoints
-AUTH_URL = "https://xero.com"
-TOKEN_URL = "https://xero.com"
-CONNECTIONS_URL = "https://xero.com"
-INVOICES_URL = "https://xero.com"
 
 # Required Scopes to read data from the Demo Company
 # 🔴 Change this in your app.py configuration section
