@@ -3,44 +3,48 @@ import requests
 import uuid
 
 # ==============================================================================
-# 1. CONFIGURATION 
+# 1. CONFIGURATION (Drawn securely from Streamlit Secrets)
 # ==============================================================================
-# 🔴 1. REPLACE THESE WITH YOUR ACTUAL HEXADECIMAL CODES FROM XERO DEVELOPER PORTAL
-CLIENT_ID = "YOUR_XERO_CLIENT_ID"       
-CLIENT_SECRET = "YOUR_XERO_CLIENT_SECRET"
+try:
+    CLIENT_ID = st.secrets["XERO_CLIENT_ID"]
+    CLIENT_SECRET = st.secrets["XERO_CLIENT_SECRET"]
+    REDIRECT_URI = st.secrets["XERO_REDIRECT_URI"]
+except KeyError as e:
+    st.error(f"Missing configuration key in Streamlit Secrets: {e}")
+    st.stop()
 
-# 🔴 2. FIXED REDIRECT URI: Must match your actual app link perfectly
-REDIRECT_URI = "https://gigo-connect-hjju63sxucd3un9fqmcvev.streamlit.app/"
-
-# 🔴 3. FIXED AUTH_URL: Cleaned up the broken slashes completely
+# Fixed Authentication and API Endpoints
 AUTH_URL = "https://xero.com"
-
-# Keep these standard endpoints exactly as they are
 TOKEN_URL = "https://xero.com"
 CONNECTIONS_URL = "https://xero.com"
 INVOICES_URL = "https://xero.com"
 
-# URL encoded scopes for stable authentication
+# URL encoded scopes for stable OAuth handshake
 SCOPES = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
 
-
+# ==============================================================================
+# 2. STREAMLIT PAGE SETUP & SESSION MANAGEMENT
+# ==============================================================================
 st.set_page_config(page_title="Xero Mock Data Dashboard", layout="wide")
 st.title("📊 Xero Demo Data Fetcher")
 
-# Initialize Session State variables
+# Initialize session state tracking
 if "auth_token" not in st.session_state:
     st.session_state.auth_token = None
 if "tenant_id" not in st.session_state:
     st.session_state.tenant_id = None
+if "tenant_name" not in st.session_state:
+    st.session_state.tenant_name = None
 
-# Step 1: Authentication Flow
+# ==============================================================================
+# STEP 1: AUTHENTICATION FLOW
+# ==============================================================================
 if not st.session_state.auth_token:
-    # Check if returning from Xero authorization redirect
     query_params = st.query_params
+    
     if "code" in query_params:
         auth_code = query_params["code"]
         
-        # Exchange authorization code for access token
         with st.spinner("Exchanging code for access token..."):
             payload = {
                 "grant_type": "authorization_code",
@@ -57,30 +61,30 @@ if not st.session_state.auth_token:
                 token_data = response.json()
                 st.session_state.auth_token = token_data.get("access_token")
                 
-                # Clear query parameters to clean up URL
+                # Clear parameters to reset state safely
                 st.query_params.clear()
                 st.rerun()
             except Exception as e:
-                st.error(f"Failed to fetch token: {e}")
+                st.error(f"Failed to fetch token. Check your Secret keys. Error: {e}")
     else:
-        # Show Login Button if not authenticated
         st.info("You need to connect to your Xero Developer Account to pull mock data.")
         
-        # Generate authorization login URL
+        # Build URL parameters dynamically using secret data values
         state_key = str(uuid.uuid4())
         login_url = f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope={SCOPES}&state={state_key}"
         
-        # 👇 REPLACE YOUR OLD st.markdown BLOCK WITH THIS:
+        # Native layout breakouts bypass frame blocks automatically
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
-# Step 2: Authenticated State - Fetch Connections and Data
+# ==============================================================================
+# STEP 2: RECOVERY OF TENANT AND API DATA QUERIES
+# ==============================================================================
 else:
     headers = {
         "Authorization": f"Bearer {st.session_state.auth_token}",
         "Content-Type": "application/json"
     }
 
-    # Fetch Tenant ID (Organization) dynamically if missing
     if not st.session_state.tenant_id:
         try:
             conn_response = requests.get(CONNECTIONS_URL, headers=headers)
@@ -88,25 +92,22 @@ else:
             connections = conn_response.json()
             
             if connections:
-                # Target the Demo Company organization linked to your account
+                # Store tenant details safely inside state memory arrays
                 st.session_state.tenant_id = connections[0]["tenantId"]
                 st.session_state.tenant_name = connections[0]["tenantName"]
                 st.rerun()
             else:
-                st.error("No connected organizations found. Please link a Demo Company in your Xero Developer Portal.")
+                st.error("No active connections found. Please activate your Xero Demo Company.")
         except Exception as e:
             st.error(f"Failed to fetch Xero connections: {e}")
 
-    # Display Connected Dashboard
     if st.session_state.tenant_id:
-        st.success(f"Connected to Connected Organization: **{st.session_state.tenant_name}**")
+        st.success(f"Connected to Xero Organisation: **{st.session_state.tenant_name}**")
         
-        # Add Xero Tenant ID header for data requests
         headers["Xero-tenant-id"] = st.session_state.tenant_id
         
-        # Action Button to Fetch Mock Invoices
         if st.button("🔄 Fetch Mock Invoices"):
-            with st.spinner("Pulling data from Xero..."):
+            with st.spinner("Pulling data from Xero API..."):
                 try:
                     data_response = requests.get(INVOICES_URL, headers=headers)
                     data_response.raise_for_status()
@@ -115,7 +116,6 @@ else:
                     if invoices_data:
                         st.write(f"### Found {len(invoices_data)} Mock Invoices")
                         
-                        # Process and structure data for Streamlit display
                         clean_invoices = []
                         for inv in invoices_data:
                             clean_invoices.append({
@@ -128,16 +128,15 @@ else:
                                 "Amount Due": inv.get("AmountDue", 0.0)
                             })
                         
-                        # Render interactive data table
                         st.dataframe(clean_invoices, use_container_width=True)
                     else:
-                        st.warning("No invoices found in your Demo Company.")
+                        st.warning("No invoices found in your Demo Company environment.")
                         
                 except Exception as e:
                     st.error(f"Error fetching data from API: {e}")
                     
-        # Log out option
         if st.sidebar.button("Disconnect Xero"):
             st.session_state.auth_token = None
             st.session_state.tenant_id = None
+            st.session_state.tenant_name = None
             st.rerun()
