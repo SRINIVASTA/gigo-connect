@@ -66,7 +66,6 @@ if not st.session_state.token_set:
         state_key = str(uuid.uuid4())
         scopes_string = "openid profile email accounting.transactions.read accounting.settings.read offline_access"
         
-        # 🟢 THE NATIVE PARSER FIX: Bypasses the SDK AttributeError completely
         params = {
             "response_type": "code",
             "client_id": CLIENT_ID,
@@ -75,9 +74,7 @@ if not st.session_state.token_set:
             "state": state_key
         }
         
-        # Safe URL parameter stitching handled by Python built-ins
         login_url = f"https://login.xero.com/identity/connect/authorize?{urlencode(params)}"
-        
         st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
 
 # ==============================================================================
@@ -92,8 +89,8 @@ else:
             with st.spinner("Recovering connected organization context parameters..."):
                 connections = identity_instance.get_connections()
                 
+                # 🟢 SDK FIX: Extract properties using index references from the array model list
                 if connections and len(connections) > 0:
-                    # Select the first connected entity dictionary block inside returned list
                     target_connection = connections[0]
                     st.session_state.xero_tenant_id = target_connection.tenant_id
                     st.session_state.xero_tenant_name = target_connection.tenant_name
