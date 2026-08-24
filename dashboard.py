@@ -1,9 +1,12 @@
 import streamlit as st
 import requests
 import uuid
+import secrets
+import hashlib
+import base64
 from urllib.parse import urlencode
 
-# Standard xero-python SDK architecture paths
+# Standard xero-python SDK paths
 from xero_python.accounting import AccountingApi
 from xero_python.identity import IdentityApi
 from xero_python.api_client import ApiClient, Configuration
@@ -11,26 +14,32 @@ from xero_python.api_client.oauth2 import OAuth2Token
 from xero_python.exceptions import ApiException
 
 # ==============================================================================
-# 1. APPLICATION CONFIGURATION
+# 1. PKCE APPLICATION SETTINGS (No Client Secret Needed for PKCE Apps!)
 # ==============================================================================
 CLIENT_ID = "6EF08EA4B68548BDAB9C66AB44820A14"
-CLIENT_SECRET = "PASTE_YOUR_REAL_XERO_CLIENT_SECRET_HERE" # 👈 Put your real secret password here!
 REDIRECT_URI = "https://gigo-connect-b9jsvgyo56lnxhi6juansy.streamlit.app/"
 
 # Initialise client configuration layers
 config = Configuration(
     oauth2_token=OAuth2Token(
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET
+        client_id=CLIENT_ID
     )
 )
 api_client = ApiClient(configuration=config)
 
+# Helper function to generate secure PKCE verification pairs
+def generate_pkce_pair():
+    verifier = secrets.token_urlsafe(64)
+    # Hash the verifier using SHA-256 string conversion steps
+    hashed = hashlib.sha256(verifier.encode('utf-8')).digest()
+    challenge = base64.urlsafe_b64encode(hashed).decode('utf-8').replace('=', '')
+    return verifier, challenge
+
 # ==============================================================================
-# 2. UI LAYOUT & MEMORY STATES Setup
+# 2. UI LAYOUT & SESSION MEMORY STATES
 # ==============================================================================
-st.set_page_config(page_title="Xero SDK Dashboard", layout="wide")
-st.title("📊 Xero Direct Native SDK Engine")
+st.set_page_config(page_title="Xero PKCE Dashboard", layout="wide")
+st.title("📊 Xero PKCE Native SDK Engine")
 
 if "token_set" not in st.session_state:
     st.session_state.token_set = None
@@ -38,65 +47,83 @@ if "xero_tenant_id" not in st.session_state:
     st.session_state.xero_tenant_id = None
 if "xero_tenant_name" not in st.session_state:
     st.session_state.xero_tenant_name = None
+if "pkce_verifier" not in st.session_state:
+    st.session_state.pkce_verifier = None
 
 # ==============================================================================
-# STEP 1: AUTHENTICATION FLOW VIA NATIVE SDK LINK
+# STEP 1: AUTHENTICATION FLOW VIA PKCE HANDSHAKE
 # ==============================================================================
 if not st.session_state.token_set:
     query_params = st.query_params
     
     if "code" in query_params:
         auth_code = query_params["code"]
-        with st.spinner("Exchanging token set via Python SDK..."):
+        with st.spinner("Exchanging token set via Python SDK PKCE Engine..."):
             try:
-                token_set = api_client.get_oauth2_token_by_code(
-                    auth_code, 
-                    client_id=CLIENT_ID, 
-                    client_secret=CLIENT_SECRET, 
-                    redirect_uri=REDIRECT_URI
+                # 🟢 PKCE TOKENS SWAP: Uses code_verifier instead of a secret key password
+                response = requests.post(
+                    "https://xero.com",
+                    data={
+                        "grant_type": "authorization_code",
+                        "client_id": CLIENT_ID,
+                        "code": auth_code,
+                        "redirect_uri": REDIRECT_URI,
+                        "code_verifier": st.session_state.pkce_verifier
+                    }
                 )
-                st.session_state.token_set = token_set
+                response.raise_for_status()
+                st.session_state.token_set = response.json()
                 st.query_params.clear()
                 st.rerun()
             except Exception as e:
-                st.error(f"SDK Token Validation Failed: {e}")
+                st.error(f"PKCE Handshake Exchange Failed: {e}")
     else:
-        st.info("Application initialized. Click below to connect directly to your Xero sandbox data.")
+        st.info("PKCE Authorization Initialized. Click below to securely connect to Gigo Sync.")
         
+        # Generate our dynamic keys for this session run
+        if not st.session_state.pkce_verifier:
+            verifier, challenge = generate_pkce_pair()
+            st.session_state.pkce_verifier = verifier
+            st.session_state.pkce_challenge = challenge
+            
         state_key = str(uuid.uuid4())
         scopes_string = "openid profile email accounting.transactions.read accounting.settings.read offline_access"
         
+        # 🟢 PKCE COMPLIANT ROUTING LINK ASSEMBLY
         params = {
             "response_type": "code",
             "client_id": CLIENT_ID,
             "redirect_uri": REDIRECT_URI,
             "scope": scopes_string,
-            "state": state_key
+            "state": state_key,
+            "code_challenge": st.session_state.pkce_challenge,
+            "code_challenge_method": "S256"
         }
         
-        login_url = f"https://login.xero.com/identity/connect/authorize?{urlencode(params)}"
-        st.link_button("🔗 Connect to Xero Demo Company", login_url, type="primary")
+        login_url = f"https://xero.com?{urlencode(params)}"
+        st.link_button("🔗 Connect via Secure PKCE Engine", login_url, type="primary")
 
 # ==============================================================================
-# STEP 2: RECOVERY OF LIVE ORG REFERENCES AND TRANSACTION INVOICES
+# STEP 2: LIVE ORGANISATION CONTEXT AND DATA FETCHING
 # ==============================================================================
 else:
+    # Hydrate tokens back into our api client system
     api_client.set_oauth2_token(st.session_state.token_set)
     identity_instance = IdentityApi(api_client)
 
     if not st.session_state.xero_tenant_id:
         try:
-            with st.spinner("Recovering connected organization context parameters..."):
+            with st.spinner("Recovering connected organization parameters..."):
                 connections = identity_instance.get_connections()
                 
-                # 🟢 SDK FIX: Extract properties using index references from the array model list
+                # Verify array offsets accurately
                 if connections and len(connections) > 0:
                     target_connection = connections[0]
                     st.session_state.xero_tenant_id = target_connection.tenant_id
                     st.session_state.xero_tenant_name = target_connection.tenant_name
                     st.rerun()
                 else:
-                    st.error("No active Sandbox connections linked to your account profile.")
+                    st.error("No active connections found. Please check your Xero Demo Company mapping link settings.")
         except ApiException as e:
             st.error(f"Xero SDK Exception during parameters parsing: {e}")
 
@@ -132,4 +159,5 @@ else:
             st.session_state.token_set = None
             st.session_state.xero_tenant_id = None
             st.session_state.xero_tenant_name = None
+            st.session_state.pkce_verifier = None
             st.rerun()
