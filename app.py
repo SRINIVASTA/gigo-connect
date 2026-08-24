@@ -67,7 +67,7 @@ if not st.session_state.auth_token:
             f'<button style="background-color:#00b7e4; color:white; border:none; '
             f'padding:10px 20px; border-radius:5px; font-size:16px; cursor:pointer;">'
             f'🔗 Connect to Xero Demo Company</button></a>', 
-            unsafe_html=True
+            unsafe_allow_html=True  # 👈 Changed this line
         )
 
 # Step 2: Authenticated State - Fetch Connections and Data
