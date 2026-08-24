@@ -14,7 +14,8 @@ CONNECTIONS_URL = "https://xero.com"
 INVOICES_URL = "https://xero.com"
 
 # Required Scopes to read data from the Demo Company
-SCOPES = "openid profile email accounting.transactions.read accounting.settings.read offline_access"
+# 🔴 Change this in your app.py configuration section
+SCOPES = "openid%20profile%20email%20accounting.transactions.read%20accounting.settings.read%20offline_access"
 
 st.set_page_config(page_title="Xero Mock Data Dashboard", layout="wide")
 st.title("📊 Xero Demo Data Fetcher")
